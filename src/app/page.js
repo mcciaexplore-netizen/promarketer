@@ -5,7 +5,6 @@ import {
   TrendingDown,
   Target,
   CalendarDays,
-  Building2,
   Plus,
   ChevronRight,
   MoreVertical,
@@ -18,7 +17,6 @@ const KPIS = [
   { name: 'Active Campaigns', value: '3', trend: '+12%', isUp: true, icon: Target, color: 'text-primary', bg: 'bg-[#e6f2fb]' },
   { name: 'Leads This Month', value: '142', trend: '+24%', isUp: true, icon: Target, color: 'text-success', bg: 'bg-[#e5f4ea]' },
   { name: 'Posts Scheduled', value: '28', trend: '-5%', isUp: false, icon: CalendarDays, color: 'text-warning', bg: 'bg-[#fef5e1]' },
-  { name: 'Competitors Tracked', value: '5', trend: '0%', isUp: true, icon: Building2, color: 'text-accent', bg: 'bg-[#e5f6f5]' },
 ];
 
 const UPCOMING_ACTIONS = [
@@ -75,8 +73,8 @@ export default function Dashboard() {
         <p className="text-text-secondary mt-1">Here is your marketing snapshot for today.</p>
       </div>
 
-      {/* KPI Bar (4 columns) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* KPI Bar */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {KPIS.map((kpi) => {
           const Icon = kpi.icon;
           return (
@@ -151,9 +149,6 @@ export default function Dashboard() {
             </button>
             <button className="btn-secondary w-full">
               <Target className="w-4 h-4" /> New Campaign
-            </button>
-            <button className="btn-secondary w-full">
-              <Building2 className="w-4 h-4" /> Add Competitor
             </button>
           </div>
         </div>
