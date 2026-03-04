@@ -1,16 +1,10 @@
 "use client"
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useReducer } from 'react';
 import toast from 'react-hot-toast';
+import { supabase } from '../../lib/supabaseClient';
+import { getLeads, moveLeadOnBoard, createLead, deleteLead as dbDeleteLead } from '../../lib/db';
 
 const LeadsContext = createContext();
-
-const MOCK_LEADS = [
-    { id: 'LP-1', name: 'Rahul Sharma', company: 'TechNova Solutions', source: 'Organic', status: 'NEW', value: 50000, nextFollowUp: '2026-10-28', lastContact: '2026-10-25', phone: '+91 9876543210', email: 'rahul@technova.com', assignee: 'Pratik' },
-    { id: 'LP-2', name: 'Priya Patel', company: 'CloudScale Inc', source: 'Referral', status: 'INTERESTED', value: 120000, nextFollowUp: '2026-10-29', lastContact: '2026-10-26', phone: '+91 9123456780', email: 'priya@cloudscale.in', assignee: 'Sarah' },
-    { id: 'LP-3', name: 'Amit Kumar', company: 'Global Logistics', source: 'Ads', status: 'NEGOTIATING', value: 85000, nextFollowUp: '2026-10-30', lastContact: '2026-10-24', phone: '+91 9988776655', email: 'amit@globallog.com', assignee: 'Amit' },
-    { id: 'LP-4', name: 'Sarah Jones', company: 'DesignStudio', source: 'LinkedIn', status: 'CONTACTED', value: 45000, nextFollowUp: '2026-10-27', lastContact: '2026-10-21', phone: '+44 7700900077', email: 'sarah@designstudio.uk', assignee: 'Pratik' },
-    { id: 'LP-5', name: 'Vikram Singh', company: 'Apex Tech', source: 'Cold Email', status: 'WON', value: 250000, nextFollowUp: '2026-11-05', lastContact: '2026-10-24', phone: '+91 9898989898', email: 'vikram@apextech.com', assignee: 'Sarah' }
-];
 
 export const STATUS_COLUMNS = ['NEW', 'CONTACTED', 'INTERESTED', 'NEGOTIATING', 'WON', 'LOST'];
 
@@ -18,61 +12,113 @@ export function LeadsProvider({ children }) {
     const [leads, setLeads] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeSpace, setActiveSpace] = useState('Lead Pipeline');
+    const [currentSpaceId, setCurrentSpaceId] = useState(null);
     const [selectedLead, setSelectedLead] = useState(null);
 
-    // Fake fetch on mount
+    // Initial fetch of leads for the current space
     useEffect(() => {
-        setIsLoading(true);
-        setTimeout(() => {
-            setLeads(MOCK_LEADS);
-            setIsLoading(false);
-        }, 1200);
+        const fetchSpaceAndLeads = async () => {
+            setIsLoading(true);
+            try {
+                // Fetch the default space to get its ID
+                const { data: spacesData } = await supabase.from('spaces').select('id, name');
+                if (spacesData && spacesData.length > 0) {
+                    const space = spacesData.find(s => s.name === activeSpace) || spacesData[0];
+                    setCurrentSpaceId(space.id);
+
+                    const leadsData = await getLeads(space.id);
+                    setLeads(leadsData || []);
+                }
+            } catch (err) {
+                console.error(err);
+                toast.error("Failed to load pipeline");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchSpaceAndLeads();
     }, [activeSpace]);
 
-    // Debounce API calls map
-    const timeouts = React.useRef(new Map());
+    // Realtime Sync Subscription
+    useEffect(() => {
+        if (!currentSpaceId) return;
 
-    const updateLeadStatus = (leadId, newStatus) => {
+        const channel = supabase.channel(`space-${currentSpaceId}`);
+
+        channel.on('postgres_changes', {
+            event: '*', schema: 'public', table: 'leads',
+            filter: `space_id=eq.${currentSpaceId}`
+        }, (payload) => {
+            const { eventType, new: newRecord, old: oldRecord } = payload;
+
+            if (eventType === 'INSERT') {
+                setLeads(prev => {
+                    if (prev.find(l => l.id === newRecord.id)) return prev;
+                    return [...prev, newRecord];
+                });
+            }
+            if (eventType === 'UPDATE') {
+                setLeads(prev => prev.map(l => l.id === newRecord.id ? { ...l, ...newRecord } : l));
+            }
+            if (eventType === 'DELETE') {
+                setLeads(prev => prev.filter(l => l.id !== oldRecord.id));
+            }
+        });
+
+        channel.subscribe();
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [currentSpaceId]);
+
+    const updateLeadStatus = async (leadId, newStatus) => {
         // Optimistic Update
+        const oldLeads = [...leads];
         setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: newStatus } : l));
 
-        // Clear any pending timeout for this lead
-        if (timeouts.current.has(leadId)) {
-            clearTimeout(timeouts.current.get(leadId));
+        try {
+            await moveLeadOnBoard(leadId, newStatus, 0); // Position logic can be enhanced
+            toast.success(`Saved to pipeline: ${newStatus}`);
+        } catch (err) {
+            console.error(err);
+            setLeads(oldLeads);
+            toast.error("Failed to update status in Supabase");
         }
+    };
 
-        // Debounce the API call by 500ms
-        const timeoutId = setTimeout(async () => {
-            try {
-                // Mock the PATCH request to API
-                console.log(`PATCH /api/sheets?tab=Leads&id=${leadId} with status=${newStatus}`);
-                // await fetch(`/api/sheets?tab=Leads&id=${leadId}`, { method: 'PATCH', body: JSON.stringify({ status: newStatus }) });
-                toast.success(`Saved to pipeline: ${newStatus}`);
-            } catch (err) {
-                toast.error("Failed to update status in Sheets");
-                // Rollback state here if needed
+    const addLead = async (newLead) => {
+        try {
+            const data = await createLead({
+                ...newLead,
+                space_id: currentSpaceId,
+                status: newLead.status || 'NEW',
+                deal_value: newLead.value || 0,
+                next_followup: newLead.nextFollowUp || new Date().toISOString().split('T')[0]
+            });
+            if (data) {
+                // setLeads([...leads, data]); // Redundant because of Realtime subscription
+                toast.success("Lead created!");
             }
-            timeouts.current.delete(leadId);
-        }, 500);
-
-        timeouts.current.set(leadId, timeoutId);
+        } catch (err) {
+            console.error(err);
+            toast.error("Error creating Lead");
+        }
     };
 
-    const addLead = (newLead) => {
-        const lead = {
-            id: `LP-${leads.length + 10}`,
-            ...newLead,
-            status: newLead.status || 'NEW',
-            value: newLead.value || 0,
-            nextFollowUp: newLead.nextFollowUp || new Date().toISOString().split('T')[0]
-        };
-        setLeads([lead, ...leads]);
-        toast.success("Lead created!");
-    };
-
-    const deleteLead = (leadId) => {
+    const deleteLead = async (leadId) => {
+        // Optimistic update
+        const oldLeads = [...leads];
         setLeads(prev => prev.filter(l => l.id !== leadId));
-        toast.success("Lead deleted");
+
+        try {
+            await dbDeleteLead(leadId);
+            toast.success("Lead deleted");
+        } catch (err) {
+            console.error(err);
+            setLeads(oldLeads);
+            toast.error("Failed to delete lead");
+        }
     };
 
     return (
