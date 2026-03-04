@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-text-primary font-sans;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold tracking-tight text-text-primary;
+  }
+}
+
+@layer components {
+  /* Corporate Component Standards */
+  
+  .card {
+    @apply bg-surface rounded-card border border-[#E5E5E5] shadow-card;
+  }
+  
+  .input-field {
+    @apply w-full border border-[#C9C9C9] rounded-input px-3 py-2 text-text-primary bg-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all;
+  }
+
+  .btn-primary {
+    @apply bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-input font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2;
+  }
+
+  .btn-secondary {
+    @apply border border-primary text-primary bg-transparent hover:bg-primary/5 px-5 py-2.5 rounded-input font-semibold transition-colors flex items-center justify-center gap-2;
+  }
+
+  .label-text {
+    @apply block text-[11px] font-semibold uppercase tracking-[1px] text-text-secondary mb-1.5;
+  }
+
+  .badge {
+    @apply px-2.5 py-0.5 rounded-full text-xs font-semibold;
+  }
+  .badge-success {
+    @apply bg-[#e5f4ea] text-success;
+  }
+  .badge-warning {
+    @apply bg-[#fef5e1] text-warning;
+  }
+  .badge-error {
+    @apply bg-[#fce8e8] text-error;
+  }
+  .badge-primary {
+    @apply bg-[#e6f2fb] text-primary;
+  }
+}

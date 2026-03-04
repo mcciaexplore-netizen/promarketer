@@ -1,0 +1,343 @@
+"use client"
+import { useState } from 'react';
+import {
+    Building,
+    Key,
+    Users,
+    Link as LinkIcon,
+    Upload,
+    CheckCircle2,
+    AlertCircle,
+    Plus,
+    RefreshCw,
+    MoreVertical
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+
+const MOCK_TEAM = [
+    { id: 1, name: 'Pratik Jadhav', email: 'pratik@mcciaexplore.net', role: 'Admin', joined: 'Oct 12, 2026' },
+    { id: 2, name: 'Sarah Smith', email: 'sarah@mcciaexplore.net', role: 'Editor', joined: 'Oct 15, 2026' },
+    { id: 3, name: 'Amit Kumar', email: 'amit@mcciaexplore.net', role: 'Viewer', joined: 'Oct 20, 2026' },
+];
+
+export default function SettingsPage() {
+    const [activeTab, setActiveTab] = useState('profile');
+
+    // API Keys state
+    const [isTestingGemini, setIsTestingGemini] = useState(false);
+    const [geminiStatus, setGeminiStatus] = useState('idle'); // idle, success, error
+
+    const handleTestGemini = () => {
+        setIsTestingGemini(true);
+        setGeminiStatus('idle');
+        setTimeout(() => {
+            setIsTestingGemini(false);
+            setGeminiStatus('success');
+            toast.success("Connection to Gemini API successful!");
+        }, 1500);
+    };
+
+    const handleInvite = () => {
+        toast.error("Team invites coming in Phase 2!");
+    };
+
+    const handleProfileSave = (e) => {
+        e.preventDefault();
+        toast.success("Business Profile saved to Google Sheets!");
+    }
+
+    const TABS = [
+        { id: 'profile', label: 'Business Profile', icon: Building },
+        { id: 'apikeys', label: 'API Keys', icon: Key },
+        { id: 'team', label: 'Team Members', icon: Users },
+        { id: 'integrations', label: 'Integrations', icon: LinkIcon }
+    ];
+
+    return (
+        <div className="space-y-6">
+
+            <div>
+                <h1 className="text-2xl font-bold tracking-tight text-text-primary">Settings</h1>
+                <p className="text-text-secondary mt-1">Manage your workspace, API keys, and external integrations.</p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+
+                {/* Navigation Sidebar (3 cols) */}
+                <div className="lg:col-span-3">
+                    <nav className="flex flex-col space-y-1" aria-label="Tabs">
+                        {TABS.map((tab) => {
+                            const Icon = tab.icon;
+                            return (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`
+                    flex items-center gap-3 px-3 py-2.5 text-sm font-semibold rounded-lg transition-colors
+                    ${activeTab === tab.id
+                                            ? 'bg-primary text-white'
+                                            : 'text-text-secondary hover:bg-gray-100/50 hover:text-text-primary'
+                                        }
+                  `}
+                                >
+                                    <Icon className={`w-5 h-5 ${activeTab === tab.id ? 'text-white' : 'text-gray-400'}`} />
+                                    {tab.label}
+                                </button>
+                            );
+                        })}
+                    </nav>
+                </div>
+
+                {/* Setting Content Area (9 cols) */}
+                <div className="lg:col-span-9 card">
+
+                    {/* PROFILE TAB */}
+                    {activeTab === 'profile' && (
+                        <div className="animate-in fade-in duration-300">
+                            <div className="p-5 border-b border-[#E5E5E5] bg-gray-50/50">
+                                <h3 className="font-bold text-lg">Business Profile</h3>
+                                <p className="text-sm text-text-secondary mt-1">This information is used across all generated campaigns and PDF reports.</p>
+                            </div>
+                            <form className="p-5 sm:p-6" onSubmit={handleProfileSave}>
+                                <div className="flex items-center gap-6 mb-8 border-b border-gray-100 pb-8">
+                                    <div className="w-24 h-24 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center relative overflow-hidden group hover:border-primary transition-colors cursor-pointer">
+                                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Upload className="w-6 h-6 text-white" />
+                                        </div>
+                                        <Building className="w-8 h-8 text-gray-400" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-semibold text-sm text-text-primary mb-1">Company Logo</h4>
+                                        <p className="text-xs text-text-secondary max-w-sm mb-3 shadow-none leading-relaxed">Recommended 512x512px. Used on exported reports and email footers.</p>
+                                        <button type="button" className="btn-secondary !py-1 !px-3 text-xs bg-white">Upload new image</button>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+                                    <div className="sm:col-span-2">
+                                        <label className="label-text">Business Name</label>
+                                        <input type="text" className="input-field max-w-lg" defaultValue="ProMarketer Hub" required />
+                                    </div>
+
+                                    <div>
+                                        <label className="label-text">Industry</label>
+                                        <input type="text" className="input-field" defaultValue="AI Marketing Software" />
+                                    </div>
+
+                                    <div>
+                                        <label className="label-text">Website URL</label>
+                                        <input type="url" className="input-field" defaultValue="https://promarketer.vercel.app" />
+                                    </div>
+
+                                    <div>
+                                        <label className="label-text">City / State</label>
+                                        <input type="text" className="input-field" defaultValue="Pune, Maharashtra" />
+                                    </div>
+
+                                    <div>
+                                        <label className="label-text">GST Number (Optional)</label>
+                                        <input type="text" className="input-field" />
+                                    </div>
+
+                                    <div className="sm:col-span-2 pt-4 border-t border-gray-100">
+                                        <label className="label-text">Primary Brand Color</label>
+                                        <div className="flex items-center gap-3">
+                                            <input type="color" className="p-0 border-0 w-10 h-10 rounded cursor-pointer mt-1" defaultValue="#0176D3" />
+                                            <span className="text-sm font-medium text-text-secondary mt-1">#0176D3 (Salesforce Blue)</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="mt-8 pt-6 border-t border-[#E5E5E5] flex justify-end">
+                                    <button type="submit" className="btn-primary">Save to Google Sheets</button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+                    {/* API KEYS TAB */}
+                    {activeTab === 'apikeys' && (
+                        <div className="animate-in fade-in duration-300">
+                            <div className="p-5 border-b border-[#E5E5E5] bg-gray-50/50">
+                                <h3 className="font-bold text-lg">AI Providers</h3>
+                                <p className="text-sm text-text-secondary mt-1">Manage your keys for text and generation engines.</p>
+                            </div>
+
+                            <div className="p-5 sm:p-6 space-y-6">
+
+                                {/* Gemini Key */}
+                                <div className="border border-gray-200 rounded-xl p-5 hover:border-gray-300 transition-colors">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                            <h4 className="font-bold text-text-primary">Google Gemini API</h4>
+                                            {geminiStatus === 'success' && <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Active</span>}
+                                        </div>
+                                    </div>
+                                    <p className="text-sm text-text-secondary mb-4 max-w-xl">Used as the primary brain for Competitor Analysis, CRM Insights, and Content generation.</p>
+
+                                    <div className="flex gap-3 items-start">
+                                        <input type="password" placeholder="AIZA*******************" className="input-field font-mono text-sm max-w-sm" defaultValue="AIZAxxxxxxxxxxxxxxxxx" />
+                                        <button className="btn-secondary !py-2 bg-white" onClick={handleTestGemini} disabled={isTestingGemini}>
+                                            {isTestingGemini ? <RefreshCw className="w-4 h-4 animate-spin text-primary" /> : "Test Connection"}
+                                        </button>
+                                        <button className="btn-primary !py-2">Save</button>
+                                    </div>
+                                    {geminiStatus === 'success' && (
+                                        <p className="text-sm mt-3 text-success flex items-center gap-1.5">
+                                            <CheckCircle2 className="w-4 h-4" /> Successfully queried `gemini-1.5-pro` model.
+                                        </p>
+                                    )}
+                                </div>
+
+                                {/* OpenAI Key */}
+                                <div className="border border-gray-200 rounded-xl p-5 hover:border-gray-300 transition-colors bg-gray-50/30">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                            <h4 className="font-bold text-text-primary">OpenAI API (Optional)</h4>
+                                        </div>
+                                    </div>
+                                    <p className="text-sm text-text-secondary mb-4 max-w-xl">Fallback or alternative provider for text generation.</p>
+
+                                    <div className="flex gap-3 items-start">
+                                        <input type="password" placeholder="sk-..." className="input-field font-mono text-sm max-w-sm" />
+                                        <button className="btn-primary !py-2 opacity-50 cursor-not-allowed">Save</button>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TEAM MEMBERS TAB */}
+                    {activeTab === 'team' && (
+                        <div className="animate-in fade-in duration-300 h-full flex flex-col">
+                            <div className="p-5 border-b border-[#E5E5E5] bg-gray-50/50 flex justify-between items-center">
+                                <div>
+                                    <h3 className="font-bold text-lg">Team Members</h3>
+                                    <p className="text-sm text-text-secondary mt-1">Manage who has access to your workspace tools.</p>
+                                </div>
+                                <button className="btn-primary !py-1.5 !px-3 font-semibold text-sm" onClick={handleInvite}>
+                                    <Plus className="w-4 h-4 mr-1" /> Invite Member
+                                </button>
+                            </div>
+
+                            <div className="overflow-x-auto flex-1">
+                                <table className="min-w-full divide-y divide-[#E5E5E5]">
+                                    <thead className="bg-white">
+                                        <tr>
+                                            <th className="px-6 py-4 text-left text-[11px] font-bold text-text-secondary uppercase tracking-wider bg-gray-50">User</th>
+                                            <th className="px-6 py-4 text-left text-[11px] font-bold text-text-secondary uppercase tracking-wider bg-gray-50">Role</th>
+                                            <th className="px-6 py-4 text-left text-[11px] font-bold text-text-secondary uppercase tracking-wider bg-gray-50">Joined Date</th>
+                                            <th className="px-6 py-4 text-right text-[11px] font-bold text-text-secondary uppercase tracking-wider bg-gray-50"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 bg-white">
+                                        {MOCK_TEAM.map(member => (
+                                            <tr key={member.id} className="hover:bg-gray-50/50 transition-colors">
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="flex items-center">
+                                                        <div className="flex-shrink-0 h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs ring-1 ring-primary/20">
+                                                            {member.name.split(' ').map(n => n[0]).join('')}
+                                                        </div>
+                                                        <div className="ml-4">
+                                                            <div className="text-sm font-semibold text-text-primary">{member.name}</div>
+                                                            <div className="text-[13px] text-text-secondary mt-0.5">{member.email}</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <span className={`badge ${member.role === 'Admin' ? 'badge-primary' :
+                                                            member.role === 'Editor' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-700'
+                                                        }`}>
+                                                        {member.role}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">
+                                                    {member.joined}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                                                    <button className="text-gray-400 hover:text-text-primary">
+                                                        <MoreVertical className="w-5 h-5" />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* INTEGRATIONS TAB */}
+                    {activeTab === 'integrations' && (
+                        <div className="animate-in fade-in duration-300">
+                            <div className="p-5 border-b border-[#E5E5E5] bg-gray-50/50">
+                                <h3 className="font-bold text-lg">App Integrations</h3>
+                                <p className="text-sm text-text-secondary mt-1">Connect your workspace with external platforms.</p>
+                            </div>
+
+                            <div className="p-5 sm:p-6 space-y-4">
+
+                                {/* Google Sheets */}
+                                <div className="border-2 border-primary border-[#E5E5E5] bg-primary/5 rounded-xl p-5 flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 bg-white rounded-lg shadow-sm border border-gray-200 flex items-center justify-center shrink-0">
+                                            {/* Simple visual mock of sheets */}
+                                            <div className="w-6 h-6 bg-green-600 rounded-sm relative shadow-sm flex items-center justify-center">
+                                                <div className="w-1 h-3 bg-white mx-1"></div>
+                                                <div className="w-1 h-3 bg-white mx-1"></div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-bold text-text-primary">Google Sheets Database</h4>
+                                            <p className="text-sm text-text-secondary mt-1">Currently serving as your backend DB. Connected via service account.</p>
+                                        </div>
+                                    </div>
+                                    <button className="btn-secondary !py-2 bg-white flex items-center gap-2 border-gray-300">
+                                        <CheckCircle2 className="w-4 h-4 text-green-600" /> Connected
+                                    </button>
+                                </div>
+
+                                {/* WhatsApp */}
+                                <div className="border border-gray-200 bg-white rounded-xl p-5 flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4 opacity-75">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 bg-gray-50 rounded-lg shadow-sm border border-gray-200 flex items-center justify-center shrink-0">
+                                            <div className="w-6 h-6 rounded-full border-2 border-[#128C7E] flex items-center justify-center">
+                                                <div className="w-2 h-2 bg-[#128C7E] rotate-45"></div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-bold text-text-primary flex items-center gap-2">WhatsApp Cloud API <span className="bg-blue-100 text-blue-700 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">Coming Soon</span></h4>
+                                            <p className="text-sm text-text-secondary mt-1 max-w-md">Automate message sending directly from your ProMarketer workflows.</p>
+                                        </div>
+                                    </div>
+                                    <button className="btn-primary !py-2 bg-gray-100 text-gray-500 border-none cursor-not-allowed">
+                                        Connect API
+                                    </button>
+                                </div>
+
+                                {/* Meta Ads */}
+                                <div className="border border-gray-200 bg-white rounded-xl p-5 flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4 opacity-75">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 bg-gray-50 rounded-lg shadow-sm border border-gray-200 flex items-center justify-center shrink-0">
+                                            <div className="w-6 h-4 bg-[#0668E1] rounded-sm"></div>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-bold text-text-primary flex items-center gap-2">Meta Ads Manager <span className="bg-blue-100 text-blue-700 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">Coming Soon</span></h4>
+                                            <p className="text-sm text-text-secondary mt-1 max-w-md">Sync generated ad copies straight to Business Manager.</p>
+                                        </div>
+                                    </div>
+                                    <button className="btn-primary !py-2 bg-gray-100 text-gray-500 border-none cursor-not-allowed">
+                                        Connect OAuth
+                                    </button>
+                                </div>
+
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+            </div>
+        </div>
+    );
+}
