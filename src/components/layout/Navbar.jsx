@@ -1,10 +1,20 @@
 "use client"
-import { usePathname } from 'next/navigation';
+import { useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { Search, Bell, User, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
+import { signOut } from '../../lib/db';
 
 export default function Navbar() {
     const pathname = usePathname();
+    const router = useRouter();
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
+
+    const handleSignOut = async () => {
+        await signOut();
+        setIsProfileOpen(false);
+        router.push('/login');
+    };
 
     const getBreadcrumbs = () => {
         if (pathname === '/') return [{ label: 'Dashboard', href: '/' }];
@@ -56,11 +66,27 @@ export default function Navbar() {
 
                     <div className="hidden lg:block lg:h-6 lg:w-px lg:bg-gray-200" aria-hidden="true" />
 
-                    <button className="flex items-center gap-x-2 text-sm font-semibold leading-6 text-text-primary">
-                        <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white">
-                            <User className="h-4 w-4" />
-                        </div>
-                    </button>
+                    <div className="relative">
+                        <button
+                            onClick={() => setIsProfileOpen(!isProfileOpen)}
+                            className="flex items-center gap-x-2 text-sm font-semibold leading-6 text-text-primary focus:outline-none"
+                        >
+                            <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white">
+                                <User className="h-4 w-4" />
+                            </div>
+                        </button>
+
+                        {isProfileOpen && (
+                            <div className="absolute right-0 mt-2 w-48 rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
+                                <button
+                                    onClick={handleSignOut}
+                                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                                >
+                                    Log out
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </header>
 
