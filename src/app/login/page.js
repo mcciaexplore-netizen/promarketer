@@ -1,7 +1,7 @@
 "use client"
 import { useState } from 'react'
 import { signIn, signUp } from '../../lib/db'
-import { supabase } from '../../lib/supabaseClient'
+import { supabase, getSupabaseClient } from '../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 
 export default function LoginPage() {
@@ -15,27 +15,37 @@ export default function LoginPage() {
         e.preventDefault()
         setLoading(true)
 
-        if (isSignUp) {
-            const { error } = await signUp(email, password, fullName)
-            if (error) {
-                toast.error(error.message || 'Signup failed')
-                setLoading(false)
-            } else {
-                toast.success('Account created successfully!')
-                setTimeout(() => {
-                    window.location.href = '/'
-                }, 1000)
-            }
-        } else {
-            const { error } = await signIn(email, password)
-            if (error) {
-                toast.error(error.message || 'Login failed')
-                setLoading(false)
-            } else {
-                toast.success('Login successful!')
-                window.location.href = '/'
-            }
+        if (!getSupabaseClient()) {
+            toast.error('Auth service unavailable. Check environment configuration.')
+            setLoading(false)
+            return
         }
+
+        try {
+            if (isSignUp) {
+                const { error } = await signUp(email, password, fullName)
+                if (error) {
+                    toast.error(error.message || 'Signup failed')
+                } else {
+                    toast.success('Account created successfully!')
+                    setTimeout(() => { window.location.href = '/' }, 1000)
+                    return
+                }
+            } else {
+                const { error } = await signIn(email, password)
+                if (error) {
+                    toast.error(error.message || 'Login failed')
+                } else {
+                    toast.success('Login successful!')
+                    window.location.href = '/'
+                    return
+                }
+            }
+        } catch (err) {
+            toast.error(err?.message || 'Something went wrong. Please try again.')
+        }
+
+        setLoading(false)
     }
 
     const handleResetPassword = async () => {
