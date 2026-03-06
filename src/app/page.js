@@ -1,4 +1,5 @@
 "use client"
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   TrendingUp,
@@ -11,6 +12,7 @@ import {
   Instagram,
   Linkedin
 } from 'lucide-react';
+import { getSupabaseClient } from '../lib/supabaseClient';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
 const KPIS = [
@@ -60,7 +62,17 @@ function StatusBadge({ status }) {
 }
 
 export default function Dashboard() {
-  const userName = "Pratik"; // Hardcoded for now, will connect to business profile context later
+  const [userName, setUserName] = useState('');
+
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const meta = session?.user?.user_metadata;
+      const name = meta?.full_name || session?.user?.email?.split('@')[0] || '';
+      setUserName(name.split(' ')[0]);
+    });
+  }, []);
 
   return (
     <div className="space-y-6">
