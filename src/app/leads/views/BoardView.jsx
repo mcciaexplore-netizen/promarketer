@@ -81,14 +81,16 @@ export default function BoardView() {
 
                                                         <div className="flex justify-between items-center">
                                                             <div className="flex items-center gap-2">
-                                                                <span className="text-[11px] font-medium text-[#5E6C84] bg-[#DFE1E6] px-1.5 py-0.5 rounded">{lead.id}</span>
+                                                                <span className="text-[11px] font-medium text-[#5E6C84] bg-[#DFE1E6] px-1.5 py-0.5 rounded">{lead.lead_code || '—'}</span>
                                                                 {lead.source && <span className="text-[10px] font-semibold text-white bg-indigo-500 px-1.5 py-0.5 rounded">{lead.source}</span>}
                                                             </div>
                                                             <div className="flex items-center gap-2">
-                                                                <span className="text-[12px] font-semibold text-gray-700">₹{lead.value.toLocaleString()}</span>
-                                                                <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-700 ml-1" title={lead.assignee}>
-                                                                    {lead.assignee[0]}
-                                                                </div>
+                                                                {lead.deal_value > 0 && <span className="text-[12px] font-semibold text-gray-700">₹{Number(lead.deal_value).toLocaleString()}</span>}
+                                                                {lead.assignee && (
+                                                                    <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-700 ml-1" title={lead.assignee.full_name}>
+                                                                        {lead.assignee.full_name?.[0] || '?'}
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     </div>

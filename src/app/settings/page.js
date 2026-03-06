@@ -1,5 +1,5 @@
 "use client"
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
     Building,
     Key,
@@ -7,25 +7,36 @@ import {
     Link as LinkIcon,
     Upload,
     CheckCircle2,
-    AlertCircle,
     Plus,
     RefreshCw,
     MoreVertical
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-const MOCK_TEAM = [
-    { id: 1, name: 'Pratik Jadhav', email: 'pratik@mcciaexplore.net', role: 'Admin', joined: 'Oct 12, 2026' },
-    { id: 2, name: 'Sarah Smith', email: 'sarah@mcciaexplore.net', role: 'Editor', joined: 'Oct 15, 2026' },
-    { id: 3, name: 'Amit Kumar', email: 'amit@mcciaexplore.net', role: 'Viewer', joined: 'Oct 20, 2026' },
-];
+import { getTeamMembers, getBusinessProfile, updateBusinessProfile } from '../../lib/db';
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState('profile');
-
-    // API Keys state
+    const [profile, setProfile] = useState(null);
+    const [savingProfile, setSavingProfile] = useState(false);
+    const profileFormRef = useRef(null);
+    const [team, setTeam] = useState([]);
+    const [teamLoading, setTeamLoading] = useState(false);
     const [isTestingGemini, setIsTestingGemini] = useState(false);
-    const [geminiStatus, setGeminiStatus] = useState('idle'); // idle, success, error
+    const [geminiStatus, setGeminiStatus] = useState('idle');
+
+    useEffect(() => {
+        getBusinessProfile().then(data => setProfile(data));
+    }, []);
+
+    useEffect(() => {
+        if (activeTab === 'team') {
+            setTeamLoading(true);
+            getTeamMembers().then(data => {
+                setTeam(data || []);
+                setTeamLoading(false);
+            });
+        }
+    }, [activeTab]);
 
     const handleTestGemini = () => {
         setIsTestingGemini(true);
@@ -38,13 +49,30 @@ export default function SettingsPage() {
     };
 
     const handleInvite = () => {
-        toast.error("Team invites coming in Phase 2!");
+        toast.success("Share the app URL with your team — they can sign up and will appear here automatically.");
     };
 
-    const handleProfileSave = (e) => {
+    const handleProfileSave = async (e) => {
         e.preventDefault();
-        toast.success("Business Profile saved to Google Sheets!");
-    }
+        setSavingProfile(true);
+        const form = profileFormRef.current;
+        const updates = {
+            business_name: form.business_name.value,
+            industry: form.industry.value,
+            website: form.website.value,
+            city: form.city.value,
+            gst_number: form.gst_number.value,
+            primary_color: form.primary_color.value,
+        };
+        try {
+            await updateBusinessProfile(updates);
+            toast.success('Business profile saved!');
+        } catch {
+            toast.error('Failed to save profile');
+        } finally {
+            setSavingProfile(false);
+        }
+    };
 
     const TABS = [
         { id: 'profile', label: 'Business Profile', icon: Building },
@@ -98,7 +126,7 @@ export default function SettingsPage() {
                                 <h3 className="font-bold text-lg">Business Profile</h3>
                                 <p className="text-sm text-text-secondary mt-1">This information is used across all generated campaigns and PDF reports.</p>
                             </div>
-                            <form className="p-5 sm:p-6" onSubmit={handleProfileSave}>
+                            <form ref={profileFormRef} className="p-5 sm:p-6" onSubmit={handleProfileSave}>
                                 <div className="flex items-center gap-6 mb-8 border-b border-gray-100 pb-8">
                                     <div className="w-24 h-24 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center relative overflow-hidden group hover:border-primary transition-colors cursor-pointer">
                                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -116,40 +144,41 @@ export default function SettingsPage() {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
                                     <div className="sm:col-span-2">
                                         <label className="label-text">Business Name</label>
-                                        <input type="text" className="input-field max-w-lg" defaultValue="ProMarketer Hub" required />
+                                        <input name="business_name" type="text" className="input-field max-w-lg" defaultValue={profile?.business_name || ''} required />
                                     </div>
 
                                     <div>
                                         <label className="label-text">Industry</label>
-                                        <input type="text" className="input-field" defaultValue="AI Marketing Software" />
+                                        <input name="industry" type="text" className="input-field" defaultValue={profile?.industry || ''} />
                                     </div>
 
                                     <div>
                                         <label className="label-text">Website URL</label>
-                                        <input type="url" className="input-field" defaultValue="https://promarketer.vercel.app" />
+                                        <input name="website" type="url" className="input-field" defaultValue={profile?.website || ''} />
                                     </div>
 
                                     <div>
                                         <label className="label-text">City / State</label>
-                                        <input type="text" className="input-field" defaultValue="Pune, Maharashtra" />
+                                        <input name="city" type="text" className="input-field" defaultValue={profile?.city || ''} />
                                     </div>
 
                                     <div>
                                         <label className="label-text">GST Number (Optional)</label>
-                                        <input type="text" className="input-field" />
+                                        <input name="gst_number" type="text" className="input-field" defaultValue={profile?.gst_number || ''} />
                                     </div>
 
                                     <div className="sm:col-span-2 pt-4 border-t border-gray-100">
                                         <label className="label-text">Primary Brand Color</label>
                                         <div className="flex items-center gap-3">
-                                            <input type="color" className="p-0 border-0 w-10 h-10 rounded cursor-pointer mt-1" defaultValue="#0176D3" />
-                                            <span className="text-sm font-medium text-text-secondary mt-1">#0176D3 (Salesforce Blue)</span>
+                                            <input name="primary_color" type="color" className="p-0 border-0 w-10 h-10 rounded cursor-pointer mt-1" defaultValue={profile?.primary_color || '#0176D3'} />
                                         </div>
                                     </div>
                                 </div>
 
                                 <div className="mt-8 pt-6 border-t border-[#E5E5E5] flex justify-end">
-                                    <button type="submit" className="btn-primary">Save to Google Sheets</button>
+                                    <button type="submit" disabled={savingProfile} className={`btn-primary ${savingProfile ? 'opacity-70 cursor-not-allowed' : ''}`}>
+                                        {savingProfile ? 'Saving...' : 'Save Profile'}
+                                    </button>
                                 </div>
                             </form>
                         </div>
@@ -214,57 +243,68 @@ export default function SettingsPage() {
                             <div className="p-5 border-b border-[#E5E5E5] bg-gray-50/50 flex justify-between items-center">
                                 <div>
                                     <h3 className="font-bold text-lg">Team Members</h3>
-                                    <p className="text-sm text-text-secondary mt-1">Manage who has access to your workspace tools.</p>
+                                    <p className="text-sm text-text-secondary mt-1">Everyone who has signed up to this workspace.</p>
                                 </div>
                                 <button className="btn-primary !py-1.5 !px-3 font-semibold text-sm" onClick={handleInvite}>
                                     <Plus className="w-4 h-4 mr-1" /> Invite Member
                                 </button>
                             </div>
 
-                            <div className="overflow-x-auto flex-1">
-                                <table className="min-w-full divide-y divide-[#E5E5E5]">
-                                    <thead className="bg-white">
-                                        <tr>
-                                            <th className="px-6 py-4 text-left text-[11px] font-bold text-text-secondary uppercase tracking-wider bg-gray-50">User</th>
-                                            <th className="px-6 py-4 text-left text-[11px] font-bold text-text-secondary uppercase tracking-wider bg-gray-50">Role</th>
-                                            <th className="px-6 py-4 text-left text-[11px] font-bold text-text-secondary uppercase tracking-wider bg-gray-50">Joined Date</th>
-                                            <th className="px-6 py-4 text-right text-[11px] font-bold text-text-secondary uppercase tracking-wider bg-gray-50"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100 bg-white">
-                                        {MOCK_TEAM.map(member => (
-                                            <tr key={member.id} className="hover:bg-gray-50/50 transition-colors">
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="flex items-center">
-                                                        <div className="flex-shrink-0 h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs ring-1 ring-primary/20">
-                                                            {member.name.split(' ').map(n => n[0]).join('')}
-                                                        </div>
-                                                        <div className="ml-4">
-                                                            <div className="text-sm font-semibold text-text-primary">{member.name}</div>
-                                                            <div className="text-[13px] text-text-secondary mt-0.5">{member.email}</div>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <span className={`badge ${member.role === 'Admin' ? 'badge-primary' :
-                                                            member.role === 'Editor' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-700'
-                                                        }`}>
-                                                        {member.role}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">
-                                                    {member.joined}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                                                    <button className="text-gray-400 hover:text-text-primary">
-                                                        <MoreVertical className="w-5 h-5" />
-                                                    </button>
-                                                </td>
+                            {teamLoading ? (
+                                <div className="flex items-center justify-center p-12">
+                                    <div className="w-6 h-6 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                                </div>
+                            ) : (
+                                <div className="overflow-x-auto flex-1">
+                                    <table className="min-w-full divide-y divide-[#E5E5E5]">
+                                        <thead className="bg-white">
+                                            <tr>
+                                                <th className="px-6 py-4 text-left text-[11px] font-bold text-text-secondary uppercase tracking-wider bg-gray-50">User</th>
+                                                <th className="px-6 py-4 text-left text-[11px] font-bold text-text-secondary uppercase tracking-wider bg-gray-50">Role</th>
+                                                <th className="px-6 py-4 text-left text-[11px] font-bold text-text-secondary uppercase tracking-wider bg-gray-50">Joined</th>
+                                                <th className="px-6 py-4 bg-gray-50"></th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100 bg-white">
+                                            {team.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={4} className="px-6 py-8 text-center text-sm text-text-secondary">
+                                                        No team members yet. Share the app URL to invite people.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                            {team.map(member => (
+                                                <tr key={member.id} className="hover:bg-gray-50/50 transition-colors">
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <div className="flex items-center">
+                                                            <div className="flex-shrink-0 h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs ring-1 ring-primary/20">
+                                                                {(member.full_name || member.email || '?').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                                                            </div>
+                                                            <div className="ml-4">
+                                                                <div className="text-sm font-semibold text-text-primary">{member.full_name || '—'}</div>
+                                                                <div className="text-[13px] text-text-secondary mt-0.5">{member.email}</div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <span className={`badge ${member.role === 'owner' || member.role === 'admin' ? 'badge-primary' : 'bg-gray-100 text-gray-700'}`}>
+                                                            {member.role || 'member'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">
+                                                        {member.created_at ? new Date(member.created_at).toLocaleDateString() : '—'}
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                                                        <button className="text-gray-400 hover:text-text-primary">
+                                                            <MoreVertical className="w-5 h-5" />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
                         </div>
                     )}
 
