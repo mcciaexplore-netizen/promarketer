@@ -1,7 +1,6 @@
 import { Inter } from "next/font/google";
 import { Toaster } from "react-hot-toast";
-import Sidebar from "@/components/layout/Sidebar";
-import Navbar from "@/components/layout/Navbar";
+import ConditionalShell from "@/components/layout/ConditionalShell";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -15,19 +14,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className={`${inter.className} bg-background text-text-primary antialiased flex h-screen overflow-hidden`}>
-        {/* Sidebar */}
-        <Sidebar className="hidden lg:flex" />
-
-        {/* Main Wrapper */}
-        <div className="flex flex-col flex-1 min-w-0">
-          <Navbar />
-
-          <main className="flex-1 overflow-y-auto w-full">
-            <div className="w-full max-w-[1200px] mx-auto px-4 py-8 lg:px-8">
-              {children}
-            </div>
-          </main>
-        </div>
+        <ConditionalShell>{children}</ConditionalShell>
 
         {/* Global Toaster */}
         <Toaster

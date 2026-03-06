@@ -1,0 +1,27 @@
+"use client"
+import { usePathname } from 'next/navigation'
+import Sidebar from './Sidebar'
+import Navbar from './Navbar'
+
+export default function ConditionalShell({ children }) {
+    const pathname = usePathname()
+    const isAuthPage = pathname === '/login'
+
+    if (isAuthPage) {
+        return <>{children}</>
+    }
+
+    return (
+        <>
+            <Sidebar />
+            <div className="flex flex-col flex-1 min-w-0">
+                <Navbar />
+                <main className="flex-1 overflow-y-auto w-full">
+                    <div className="w-full max-w-[1200px] mx-auto px-4 py-8 lg:px-8">
+                        {children}
+                    </div>
+                </main>
+            </div>
+        </>
+    )
+}

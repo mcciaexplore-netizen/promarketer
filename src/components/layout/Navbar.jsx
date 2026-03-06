@@ -1,19 +1,17 @@
 "use client"
 import { useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { Search, Bell, User, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { signOut } from '../../lib/db';
 
 export default function Navbar() {
     const pathname = usePathname();
-    const router = useRouter();
     const [isProfileOpen, setIsProfileOpen] = useState(false);
 
     const handleSignOut = async () => {
         await signOut();
-        setIsProfileOpen(false);
-        router.push('/login');
+        window.location.href = '/login';
     };
 
     const getBreadcrumbs = () => {

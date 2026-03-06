@@ -1,12 +1,10 @@
 "use client"
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { signIn, signUp } from '../../lib/db'
 import { supabase } from '../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 
 export default function LoginPage() {
-    const router = useRouter()
     const [isSignUp, setIsSignUp] = useState(false)
     const [fullName, setFullName] = useState('')
     const [email, setEmail] = useState('')
@@ -18,16 +16,14 @@ export default function LoginPage() {
         setLoading(true)
 
         if (isSignUp) {
-            const { error, data } = await signUp(email, password, fullName)
+            const { error } = await signUp(email, password, fullName)
             if (error) {
                 toast.error(error.message || 'Signup failed')
                 setLoading(false)
             } else {
                 toast.success('Account created successfully!')
-                // Refresh the router to push to the secured dashboard
                 setTimeout(() => {
-                    router.push('/')
-                    window.location.reload()
+                    window.location.href = '/'
                 }, 1000)
             }
         } else {
@@ -37,8 +33,7 @@ export default function LoginPage() {
                 setLoading(false)
             } else {
                 toast.success('Login successful!')
-                router.push('/')
-                window.location.reload()
+                window.location.href = '/'
             }
         }
     }
