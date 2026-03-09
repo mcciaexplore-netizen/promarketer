@@ -48,7 +48,7 @@ export default function SummaryView() {
         { week: 'Week 4', added: 9 },
     ];
 
-    const topLeads = [...leads].sort((a, b) => b.value - a.value).slice(0, 5);
+    const topLeads = [...leads].sort((a, b) => (b.value || 0) - (a.value || 0)).slice(0, 5);
 
     return (
         <div className="h-full overflow-y-auto custom-scrollbar p-1 pb-10 space-y-6">
@@ -131,12 +131,12 @@ export default function SummaryView() {
                             <div className="flex items-center gap-3">
                                 <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-800">{i + 1}</div>
                                 <div>
-                                    <p className="text-[13px] font-bold text-[#172B4D]">{l.name}</p>
-                                    <p className="text-[11px] font-medium text-[#5E6C84]">{l.company}</p>
+                                    <p className="text-[13px] font-bold text-[#172B4D]">{l.name || 'Unnamed Lead'}</p>
+                                    <p className="text-[11px] font-medium text-[#5E6C84]">{l.company || 'No Company'}</p>
                                 </div>
                             </div>
                             <div className="text-right">
-                                <p className="text-[14px] font-bold text-[#172B4D]">₹{l.value.toLocaleString()}</p>
+                                <p className="text-[14px] font-bold text-[#172B4D]">₹{(l.value || 0).toLocaleString()}</p>
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-[#5E6C84]">{l.status}</span>
                             </div>
                         </div>
