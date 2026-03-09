@@ -1,38 +1,10 @@
 "use client"
-import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { Search, Bell, ChevronRight, LogOut } from 'lucide-react';
+import { Search, Bell, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
-import { signOut } from '../../lib/db';
-import { getSupabaseClient } from '../../lib/supabaseClient';
 
 export default function Navbar() {
     const pathname = usePathname();
-    const [isProfileOpen, setIsProfileOpen] = useState(false);
-    const [user, setUser] = useState(null);
-
-    useEffect(() => {
-        const supabase = getSupabaseClient();
-        if (!supabase) return;
-
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setUser(session?.user ?? null);
-        });
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setUser(session?.user ?? null);
-        });
-
-        return () => subscription.unsubscribe();
-    }, []);
-
-    const handleSignOut = async () => {
-        await signOut();
-        window.location.href = '/login';
-    };
-
-    const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Account';
-    const initials = displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
     const getBreadcrumbs = () => {
         if (pathname === '/') return [{ label: 'Dashboard', href: '/' }];
@@ -84,45 +56,16 @@ export default function Navbar() {
 
                     <div className="hidden lg:block lg:h-6 lg:w-px lg:bg-gray-200" aria-hidden="true" />
 
-                    {user ? (
-                        <div className="relative">
-                            <button
-                                onClick={() => setIsProfileOpen(!isProfileOpen)}
-                                className="flex items-center gap-x-2 text-sm font-semibold leading-6 text-text-primary focus:outline-none"
-                            >
-                                <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold">
-                                    {initials}
-                                </div>
-                                <span className="hidden lg:block text-sm text-text-primary">{displayName}</span>
-                            </button>
-
-                            {isProfileOpen && (
-                                <>
-                                    <div className="fixed inset-0 z-40" onClick={() => setIsProfileOpen(false)} />
-                                    <div className="absolute right-0 mt-2 w-56 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 z-50">
-                                        <div className="px-4 py-3 border-b border-gray-100">
-                                            <p className="text-xs text-text-secondary">Signed in as</p>
-                                            <p className="text-sm font-semibold text-text-primary truncate">{user.email}</p>
-                                        </div>
-                                        <button
-                                            onClick={handleSignOut}
-                                            className="flex w-full items-center gap-x-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                                        >
-                                            <LogOut className="h-4 w-4" />
-                                            Log out
-                                        </button>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    ) : (
-                        <Link
-                            href="/login"
-                            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-[#032D60] transition-colors"
+                    <div className="relative">
+                        <button
+                            className="flex items-center gap-x-2 text-sm font-semibold leading-6 text-text-primary focus:outline-none cursor-default"
                         >
-                            Sign In
-                        </Link>
-                    )}
+                            <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold">
+                                AC
+                            </div>
+                            <span className="hidden lg:block text-sm text-text-primary">Account</span>
+                        </button>
+                    </div>
                 </div>
             </header>
 

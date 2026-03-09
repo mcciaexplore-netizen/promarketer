@@ -53,8 +53,11 @@ export const getSpaces = async () => {
 
 export const createSpace = async (space) => {
     const { data: { user } } = await supabase.auth.getUser()
+    const payload = { ...space }
+    if (user?.id) payload.created_by = user.id
+
     const { data } = await supabase.from('spaces')
-        .insert({ ...space, created_by: user.id })
+        .insert(payload)
         .select().single()
     return data
 }
@@ -81,8 +84,11 @@ export const getLeads = async (spaceId) => {
 
 export const createLead = async (lead) => {
     const { data: { user } } = await supabase.auth.getUser()
+    const payload = { ...lead }
+    if (user?.id) payload.created_by = user.id
+
     const { data } = await supabase.from('leads')
-        .insert({ ...lead, created_by: user.id })
+        .insert(payload)
         .select('*, assignee:assignee_id(id, full_name, avatar_url)')
         .single()
     return data
@@ -119,8 +125,11 @@ export const getActivities = async (leadId) => {
 
 export const logActivity = async (activity) => {
     const { data: { user } } = await supabase.auth.getUser()
+    const payload = { ...activity }
+    if (user?.id) payload.logged_by = user.id
+
     const { data } = await supabase.from('activities')
-        .insert({ ...activity, logged_by: user.id })
+        .insert(payload)
         .select('*, logged_by(full_name, avatar_url)')
         .single()
     return data
@@ -129,6 +138,7 @@ export const logActivity = async (activity) => {
 // ── NOTIFICATIONS ─────────────────────────────
 export const getNotifications = async () => {
     const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return []
     const { data } = await supabase.from('notifications')
         .select('*').eq('recipient_id', user.id)
         .order('created_at', { ascending: false }).limit(20)

@@ -62,17 +62,9 @@ function StatusBadge({ status }) {
 }
 
 export default function Dashboard() {
-  const [userName, setUserName] = useState('');
+  const [userName, setUserName] = useState('Admin');
 
-  useEffect(() => {
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const meta = session?.user?.user_metadata;
-      const name = meta?.full_name || session?.user?.email?.split('@')[0] || '';
-      setUserName(name.split(' ')[0]);
-    });
-  }, []);
+
 
   return (
     <div className="space-y-6">

@@ -1,16 +1,8 @@
 "use client"
-import { usePathname } from 'next/navigation'
 import Sidebar from './Sidebar'
 import Navbar from './Navbar'
 
 export default function ConditionalShell({ children }) {
-    const pathname = usePathname()
-    const isAuthPage = pathname === '/login'
-
-    if (isAuthPage) {
-        return <>{children}</>
-    }
-
     return (
         <>
             <Sidebar />
