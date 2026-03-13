@@ -218,6 +218,7 @@ export const getGoogleCalendarStatus = async () => {
         connected,
         email: token?.email || null,
         autoSync: profile?.google_calendar_auto_sync ?? true,
+        campaignStorageProvider: profile?.campaign_storage_provider || 'supabase',
         expiryDate: token?.expiry_date || null
     }
 }

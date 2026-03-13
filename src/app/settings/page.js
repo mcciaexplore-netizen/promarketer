@@ -11,7 +11,9 @@ import {
     RefreshCw,
     MoreVertical,
     CalendarRange,
-    Loader2
+    Loader2,
+    Database,
+    Table2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getGoogleCalendarStatus, getTeamMembers, getBusinessProfile, updateBusinessProfile } from '../../lib/db';
@@ -26,14 +28,21 @@ export default function SettingsPage() {
     const [isTestingGemini, setIsTestingGemini] = useState(false);
     const [geminiStatus, setGeminiStatus] = useState('idle');
     const [googleCalendar, setGoogleCalendar] = useState({ connected: false, autoSync: true, email: null });
+    const [storageStatus, setStorageStatus] = useState({ supabaseConnected: true, sheetsConfigured: false, campaignStorageProvider: 'supabase' });
     const [isSyncingAll, setIsSyncingAll] = useState(false);
     const [isDisconnecting, setIsDisconnecting] = useState(false);
     const [isSavingAutoSync, setIsSavingAutoSync] = useState(false);
+    const [isSavingStorageProvider, setIsSavingStorageProvider] = useState(false);
 
     useEffect(() => {
-        Promise.all([getBusinessProfile(), getGoogleCalendarStatus()]).then(([profileData, googleStatus]) => {
+        Promise.all([
+            getBusinessProfile(),
+            getGoogleCalendarStatus(),
+            fetch('/api/settings/storage-status').then((res) => res.json()).catch(() => ({ success: false }))
+        ]).then(([profileData, googleStatus, storageResult]) => {
             setProfile(profileData);
             setGoogleCalendar(googleStatus);
+            if (storageResult.success) setStorageStatus(storageResult.data);
         });
     }, []);
 
@@ -84,9 +93,14 @@ export default function SettingsPage() {
     };
 
     const refreshGoogleCalendarStatus = async () => {
-        const [profileData, googleStatus] = await Promise.all([getBusinessProfile(), getGoogleCalendarStatus()]);
+        const [profileData, googleStatus, storageResult] = await Promise.all([
+            getBusinessProfile(),
+            getGoogleCalendarStatus(),
+            fetch('/api/settings/storage-status').then((res) => res.json()).catch(() => ({ success: false }))
+        ]);
         setProfile(profileData);
         setGoogleCalendar(googleStatus);
+        if (storageResult.success) setStorageStatus(storageResult.data);
     };
 
     const handleToggleAutoSync = async () => {
@@ -133,6 +147,23 @@ export default function SettingsPage() {
             toast.error(error.message);
         } finally {
             setIsDisconnecting(false);
+        }
+    };
+
+    const handleStorageProviderChange = async (provider) => {
+        setIsSavingStorageProvider(true);
+        try {
+            if ((provider === 'sheets' || provider === 'both') && !storageStatus.sheetsConfigured) {
+                throw new Error('Google Sheets is not configured in server environment variables');
+            }
+
+            await updateBusinessProfile({ campaign_storage_provider: provider });
+            await refreshGoogleCalendarStatus();
+            toast.success(`Campaigns will now save to ${provider === 'both' ? 'Supabase and Google Sheets' : provider === 'sheets' ? 'Google Sheets' : 'Supabase'}`);
+        } catch (error) {
+            toast.error(error.message || 'Failed to update storage provider');
+        } finally {
+            setIsSavingStorageProvider(false);
         }
     };
 
@@ -438,24 +469,65 @@ export default function SettingsPage() {
                                     </div>
                                 </div>
 
-                                {/* Google Sheets */}
-                                <div className="border-2 border-primary border-[#E5E5E5] bg-primary/5 rounded-xl p-5 flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-white rounded-lg shadow-sm border border-gray-200 flex items-center justify-center shrink-0">
-                                            {/* Simple visual mock of sheets */}
-                                            <div className="w-6 h-6 bg-green-600 rounded-sm relative shadow-sm flex items-center justify-center">
-                                                <div className="w-1 h-3 bg-white mx-1"></div>
-                                                <div className="w-1 h-3 bg-white mx-1"></div>
+                                <div className="border border-[#E5E5E5] bg-white rounded-xl p-5 space-y-5">
+                                    <div className="flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-white rounded-lg shadow-sm border border-gray-200 flex items-center justify-center shrink-0">
+                                                <Database className="w-6 h-6 text-primary" />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-text-primary">Supabase Database</h4>
+                                                <p className="text-sm text-text-secondary mt-1">Primary workspace database for campaigns, leads, scheduler posts, and settings.</p>
                                             </div>
                                         </div>
-                                        <div>
-                                            <h4 className="font-bold text-text-primary">Google Sheets Database</h4>
-                                            <p className="text-sm text-text-secondary mt-1">Currently serving as your backend DB. Connected via service account.</p>
+                                        <span className="btn-secondary !py-2 bg-white border-gray-300">
+                                            <CheckCircle2 className="w-4 h-4 text-green-600" /> Connected
+                                        </span>
+                                    </div>
+
+                                    <div className="flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4 rounded-xl border border-slate-200 p-4">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-white rounded-lg shadow-sm border border-gray-200 flex items-center justify-center shrink-0">
+                                                <Table2 className="w-6 h-6 text-green-600" />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-text-primary">Google Sheets</h4>
+                                                <p className="text-sm text-text-secondary mt-1">
+                                                    {storageStatus.sheetsConfigured
+                                                        ? 'Connected via service account. Campaign saves can be mirrored into the Campaigns sheet.'
+                                                        : 'Not configured yet. Add GOOGLE_SHEETS_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL, and GOOGLE_PRIVATE_KEY on the server.'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <span className={`btn-secondary !py-2 bg-white border-gray-300 ${!storageStatus.sheetsConfigured ? 'opacity-60' : ''}`}>
+                                            <CheckCircle2 className={`w-4 h-4 ${storageStatus.sheetsConfigured ? 'text-green-600' : 'text-gray-400'}`} />
+                                            {storageStatus.sheetsConfigured ? 'Connected' : 'Not Configured'}
+                                        </span>
+                                    </div>
+
+                                    <div className="rounded-xl border border-slate-200 p-4">
+                                        <div className="mb-3">
+                                            <p className="font-semibold text-text-primary">Default campaign save destination</p>
+                                            <p className="text-sm text-text-secondary mt-1">Choose where newly saved campaigns should go.</p>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                            {[
+                                                { id: 'supabase', label: 'Supabase' },
+                                                { id: 'sheets', label: 'Google Sheets' },
+                                                { id: 'both', label: 'Both' }
+                                            ].map((option) => (
+                                                <button
+                                                    key={option.id}
+                                                    type="button"
+                                                    onClick={() => handleStorageProviderChange(option.id)}
+                                                    disabled={isSavingStorageProvider || ((option.id === 'sheets' || option.id === 'both') && !storageStatus.sheetsConfigured)}
+                                                    className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${storageStatus.campaignStorageProvider === option.id ? 'border-primary bg-primary/5 text-primary' : 'border-slate-200 text-slate-600 hover:border-slate-300'} disabled:opacity-50`}
+                                                >
+                                                    {option.label}
+                                                </button>
+                                            ))}
                                         </div>
                                     </div>
-                                    <button className="btn-secondary !py-2 bg-white flex items-center gap-2 border-gray-300">
-                                        <CheckCircle2 className="w-4 h-4 text-green-600" /> Connected
-                                    </button>
                                 </div>
 
                                 {/* WhatsApp */}

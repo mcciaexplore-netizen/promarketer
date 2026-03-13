@@ -266,6 +266,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE leads;
 ALTER TABLE business_profile
   ADD COLUMN IF NOT EXISTS google_calendar_auto_sync BOOLEAN DEFAULT true;
 
+ALTER TABLE business_profile
+  ADD COLUMN IF NOT EXISTS campaign_storage_provider TEXT DEFAULT 'supabase';
+
 ALTER TABLE scheduled_posts
   ADD COLUMN IF NOT EXISTS google_event_id TEXT;
 

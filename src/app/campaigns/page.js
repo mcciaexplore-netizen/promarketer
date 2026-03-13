@@ -1,5 +1,5 @@
 "use client"
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Wand2,
     Calendar,
@@ -10,54 +10,134 @@ import {
     Mail,
     Facebook,
     MessageSquare,
-    Globe
+    Globe,
+    Database,
+    Loader2,
+    Table2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+const buildMockCalendar = () => ([
+    {
+        week: 1, days: [
+            { day: 'Mon', platform: 'Instagram', type: 'Reel', content: 'Behind the scenes video showing your team working on recent project.' },
+            { day: 'Tue', platform: 'LinkedIn', type: 'Thought Leadership', content: 'Long-form post about industry trends affecting mid-market.' },
+            { day: 'Wed', platform: 'WhatsApp', type: 'Broadcast', content: 'Send a quick tip + link to our latest comprehensive guide.' },
+            { day: 'Thu', platform: 'Google Ads', type: 'PPC', content: 'Launch search campaign targeting "enterprise CRM tools".' },
+            { day: 'Fri', platform: 'Email', type: 'Newsletter', content: 'Weekly digest with 3 top articles and an exclusive offer.' },
+            { day: 'Sat', platform: null },
+            { day: 'Sun', platform: null }
+        ]
+    },
+    {
+        week: 2, days: [
+            { day: 'Mon', platform: 'Facebook', type: 'Image Post', content: 'Customer testimonial graphic highlighting ROI.' },
+            { day: 'Tue', platform: 'WhatsApp', type: 'Broadcast', content: 'Follow-up message on the guide sent last Wednesday.' },
+            { day: 'Wed', platform: 'LinkedIn', type: 'Poll', content: 'Ask network about their biggest pain point in Q4 planning.' },
+            { day: 'Thu', platform: 'Instagram', type: 'Carousel', content: '5 slides breaking down the answer to the LinkedIn poll.' },
+            { day: 'Fri', platform: 'Email', type: 'Promo', content: 'End of month special offer blast to warm leads.' },
+            { day: 'Sat', platform: 'Instagram', type: 'Story', content: 'Weekend Q&A box for audience engagement.' },
+            { day: 'Sun', platform: null }
+        ]
+    }
+]);
+
 export default function CampaignPlannerPage() {
     const [isGenerating, setIsGenerating] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
     const [calendarData, setCalendarData] = useState(null);
     const [platforms, setPlatforms] = useState([]);
+    const [storageStatus, setStorageStatus] = useState({
+        supabaseConnected: true,
+        sheetsConfigured: false,
+        campaignStorageProvider: 'supabase'
+    });
+    const [form, setForm] = useState({
+        industry: '',
+        goal: '',
+        tone: 'Professional',
+        budgetRange: '₹0 (Organic only)',
+        keyDates: ''
+    });
+
+    useEffect(() => {
+        fetch('/api/settings/storage-status')
+            .then((response) => response.json())
+            .then((result) => {
+                if (result.success) setStorageStatus(result.data);
+            })
+            .catch(() => null);
+    }, []);
 
     const handlePlatformToggle = (val) => {
         if (platforms.includes(val)) setPlatforms(platforms.filter(p => p !== val));
         else setPlatforms([...platforms, val]);
-    }
+    };
+
+    const handleFieldChange = (field, value) => {
+        setForm((current) => ({ ...current, [field]: value }));
+    };
+
+    const saveCampaign = async (providerOverride) => {
+        if (!calendarData) {
+            toast.error('Generate a campaign first');
+            return;
+        }
+
+        const provider = providerOverride || storageStatus.campaignStorageProvider || 'supabase';
+        if ((provider === 'sheets' || provider === 'both') && !storageStatus.sheetsConfigured) {
+            toast.error('Google Sheets is not configured in server environment variables');
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            const response = await fetch('/api/campaigns/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: `${form.industry} Campaign`,
+                    business_type: form.industry,
+                    goal: form.goal,
+                    budget_range: form.budgetRange,
+                    tone: form.tone,
+                    key_dates: form.keyDates,
+                    platforms,
+                    calendar_data: calendarData,
+                    provider
+                })
+            });
+
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Failed to save campaign');
+            }
+
+            const label = provider === 'both'
+                ? 'Supabase and Google Sheets'
+                : provider === 'sheets'
+                    ? 'Google Sheets'
+                    : 'Supabase';
+
+            toast.success(`Campaign saved to ${label}`);
+        } catch (error) {
+            toast.error(error.message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     const handleGenerate = (e) => {
         e.preventDefault();
         if (platforms.length === 0) return toast.error("Please select at least one platform");
 
         setIsGenerating(true);
-        // Mock API Call
-        setTimeout(() => {
-            setCalendarData([
-                {
-                    week: 1, days: [
-                        { day: 'Mon', platform: 'Instagram', type: 'Reel', content: 'Behind the scenes video showing your team working on recent project.' },
-                        { day: 'Tue', platform: 'LinkedIn', type: 'Thought Leadership', content: 'Long-form post about industry trends affecting mid-market.' },
-                        { day: 'Wed', platform: 'WhatsApp', type: 'Broadcast', content: 'Send a quick tip + link to our latest comprehensive guide.' },
-                        { day: 'Thu', platform: 'Google Ads', type: 'PPC', content: 'Launch search campaign targeting "enterprise CRM tools".' },
-                        { day: 'Fri', platform: 'Email', type: 'Newsletter', content: 'Weekly digest with 3 top articles and an exclusive offer.' },
-                        { day: 'Sat', platform: null },
-                        { day: 'Sun', platform: null }
-                    ]
-                },
-                {
-                    week: 2, days: [
-                        { day: 'Mon', platform: 'Facebook', type: 'Image Post', content: 'Customer testimonial graphic highlighting ROI.' },
-                        { day: 'Tue', platform: 'WhatsApp', type: 'Broadcast', content: 'Follow-up message on the guide sent last Wednesday.' },
-                        { day: 'Wed', platform: 'LinkedIn', type: 'Poll', content: 'Ask network about their biggest pain point in Q4 planning.' },
-                        { day: 'Thu', platform: 'Instagram', type: 'Carousel', content: '5 slides breaking down the answer to the LinkedIn poll.' },
-                        { day: 'Fri', platform: 'Email', type: 'Promo', content: 'End of month special offer blast to warm leads.' },
-                        { day: 'Sat', platform: 'Instagram', type: 'Story', content: 'Weekend Q&A box for audience engagement.' },
-                        { day: 'Sun', platform: null }
-                    ]
-                }
-            ]);
+        setTimeout(async () => {
+            const generated = buildMockCalendar();
+            setCalendarData(generated);
             setIsGenerating(false);
             toast.success("Campaign calendar generated!");
-        }, 2500);
+        }, 1500);
     };
 
     const getPlatformStyle = (platform) => {
@@ -84,6 +164,12 @@ export default function CampaignPlannerPage() {
         }
     };
 
+    const storageLabel = storageStatus.campaignStorageProvider === 'both'
+        ? 'Supabase + Google Sheets'
+        : storageStatus.campaignStorageProvider === 'sheets'
+            ? 'Google Sheets'
+            : 'Supabase';
+
     return (
         <div className="space-y-6">
 
@@ -94,7 +180,6 @@ export default function CampaignPlannerPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-                {/* Input Form (4 col) */}
                 <div className="lg:col-span-4 card h-fit">
                     <div className="p-5 border-b border-[#E5E5E5] bg-gray-50/50 rounded-t-card">
                         <h3 className="font-bold text-lg flex items-center gap-2">
@@ -105,7 +190,7 @@ export default function CampaignPlannerPage() {
 
                         <div>
                             <label className="label-text">Industry</label>
-                            <select className="input-field" required>
+                            <select className="input-field" required value={form.industry} onChange={(e) => handleFieldChange('industry', e.target.value)}>
                                 <option value="">Select industry...</option>
                                 <option>Retail</option>
                                 <option>SaaS</option>
@@ -132,13 +217,13 @@ export default function CampaignPlannerPage() {
 
                         <div>
                             <label className="label-text">Campaign Goal</label>
-                            <textarea rows={2} className="input-field resize-none text-sm" placeholder="e.g. Launching our new premium tier targeting executives..." required />
+                            <textarea rows={2} className="input-field resize-none text-sm" placeholder="e.g. Launching our new premium tier targeting executives..." required value={form.goal} onChange={(e) => handleFieldChange('goal', e.target.value)} />
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="label-text">Tone</label>
-                                <select className="input-field text-sm">
+                                <select className="input-field text-sm" value={form.tone} onChange={(e) => handleFieldChange('tone', e.target.value)}>
                                     <option>Professional</option>
                                     <option>Friendly</option>
                                     <option>Urgent</option>
@@ -148,7 +233,7 @@ export default function CampaignPlannerPage() {
                             </div>
                             <div>
                                 <label className="label-text">Budget Range</label>
-                                <select className="input-field text-sm">
+                                <select className="input-field text-sm" value={form.budgetRange} onChange={(e) => handleFieldChange('budgetRange', e.target.value)}>
                                     <option>₹0 (Organic only)</option>
                                     <option>₹10k - 50k</option>
                                     <option>₹50k - 1L</option>
@@ -160,7 +245,15 @@ export default function CampaignPlannerPage() {
 
                         <div>
                             <label className="label-text text-accent">Key Dates / Festivals</label>
-                            <input type="text" className="input-field text-sm" placeholder="e.g. Diwali offer ending Oct 30..." />
+                            <input type="text" className="input-field text-sm" placeholder="e.g. Diwali offer ending Oct 30..." value={form.keyDates} onChange={(e) => handleFieldChange('keyDates', e.target.value)} />
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+                            <div className="flex items-center gap-2 font-semibold text-text-primary">
+                                {storageStatus.campaignStorageProvider === 'sheets' ? <Table2 className="w-4 h-4 text-green-600" /> : <Database className="w-4 h-4 text-primary" />}
+                                Saving destination: {storageLabel}
+                            </div>
+                            <p className="mt-1 text-text-secondary">Change this in Settings → Integrations.</p>
                         </div>
 
                         <button type="submit" className="btn-primary w-full shadow-sm mt-4" disabled={isGenerating}>
@@ -175,7 +268,6 @@ export default function CampaignPlannerPage() {
                     </form>
                 </div>
 
-                {/* Output Grid (8 col) */}
                 <div className="lg:col-span-8 flex flex-col gap-6">
 
                     <div className="card min-h-[400px] flex flex-col items-center justify-center bg-gray-50/30 p-6 relative overflow-hidden">
@@ -193,23 +285,26 @@ export default function CampaignPlannerPage() {
                         {isGenerating && (
                             <div className="text-center">
                                 <div className="w-12 h-12 rounded-full border-4 border-primary border-t-transparent animate-spin mx-auto mb-4 shadow-sm" />
-                                <p className="font-semibold text-text-primary animate-pulse">Running AI Strategy Enging...</p>
+                                <p className="font-semibold text-text-primary animate-pulse">Running AI Strategy Engine...</p>
                                 <p className="text-sm text-text-secondary mt-1">Cross-referencing platforms and budget...</p>
                             </div>
                         )}
 
                         {calendarData && (
                             <div className="w-full h-full animate-in fade-in zoom-in duration-300">
-                                <div className="flex justify-between items-end mb-6">
+                                <div className="flex justify-between items-end mb-6 gap-3 flex-wrap">
                                     <div>
                                         <h2 className="text-xl font-bold tracking-tight text-text-primary">Your Marketing Calendar</h2>
                                         <p className="text-sm text-text-secondary mt-1">Review your generated strategy below.</p>
                                     </div>
-                                    <div className="flex gap-2">
-                                        <button className="btn-secondary !py-2 !px-3 font-semibold text-sm bg-white" onClick={() => toast.success('Saved to Campaigns Google Sheet!')}>
-                                            <Download className="w-4 h-4" /> Google Sheets
+                                    <div className="flex gap-2 flex-wrap">
+                                        <button className="btn-secondary !py-2 !px-3 font-semibold text-sm bg-white" onClick={() => saveCampaign('sheets')} disabled={isSaving || !storageStatus.sheetsConfigured}>
+                                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Save to Sheets
                                         </button>
-                                        <button className="btn-primary !py-2 !px-3 font-semibold text-sm">
+                                        <button className="btn-primary !py-2 !px-3 font-semibold text-sm" onClick={() => saveCampaign()} disabled={isSaving}>
+                                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />} Save Campaign
+                                        </button>
+                                        <button className="btn-secondary !py-2 !px-3 font-semibold text-sm bg-white" onClick={() => toast.success('PDF export coming soon')}>
                                             <FileText className="w-4 h-4" /> Export PDF
                                         </button>
                                     </div>
@@ -223,7 +318,6 @@ export default function CampaignPlannerPage() {
                                             </h4>
 
                                             <div className="grid grid-cols-7 gap-3">
-                                                {/* Headers */}
                                                 <div className="col-span-1 text-center font-semibold text-xs text-text-secondary uppercase">Mon</div>
                                                 <div className="col-span-1 text-center font-semibold text-xs text-text-secondary uppercase">Tue</div>
                                                 <div className="col-span-1 text-center font-semibold text-xs text-text-secondary uppercase">Wed</div>
@@ -232,7 +326,6 @@ export default function CampaignPlannerPage() {
                                                 <div className="col-span-1 text-center font-semibold text-xs text-text-secondary uppercase">Sat</div>
                                                 <div className="col-span-1 text-center font-semibold text-xs text-text-secondary uppercase">Sun</div>
 
-                                                {/* Cells */}
                                                 {weekData.days.map((dayObj, i) => (
                                                     <div key={i} className={`p-2 rounded border shadow-sm min-h-[140px] flex flex-col ${dayObj.platform ? 'bg-white border-gray-200' : 'bg-transparent border-dashed border-gray-200'}`}>
                                                         {dayObj.platform ? (

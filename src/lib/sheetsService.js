@@ -20,6 +20,33 @@ export class GoogleSheetsService {
         this.sheets = google.sheets({ version: 'v4', auth: this.auth });
     }
 
+    async ensureSheetExists(sheetName) {
+        if (!this.spreadsheetId) throw new Error("Missing GOOGLE_SHEETS_ID");
+
+        const spreadsheet = await this.sheets.spreadsheets.get({
+            spreadsheetId: this.spreadsheetId,
+        });
+
+        const exists = (spreadsheet.data.sheets || []).some(
+            (sheet) => sheet.properties?.title === sheetName
+        );
+
+        if (exists) return;
+
+        await this.sheets.spreadsheets.batchUpdate({
+            spreadsheetId: this.spreadsheetId,
+            requestBody: {
+                requests: [
+                    {
+                        addSheet: {
+                            properties: { title: sheetName }
+                        }
+                    }
+                ]
+            }
+        });
+    }
+
     /**
      * Reads all rows from a specific sheet/tab.
      * Assumes row 1 contains headers.
