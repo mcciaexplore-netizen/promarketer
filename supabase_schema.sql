@@ -171,6 +171,7 @@ CREATE TABLE scheduled_posts (
   image_url TEXT,
   scheduled_at TIMESTAMP,
   status TEXT DEFAULT 'Draft',   -- Draft | Scheduled | Published
+  google_event_id TEXT,
   published_at TIMESTAMP,
   created_by UUID REFERENCES profiles(id),
   created_at TIMESTAMP DEFAULT NOW()
@@ -258,6 +259,33 @@ CREATE POLICY "Only admin can delete leads" ON leads
   );
 
 ALTER PUBLICATION supabase_realtime ADD TABLE leads;
+
+-- ============================================
+-- GOOGLE CALENDAR INTEGRATION UPGRADES
+-- ============================================
+ALTER TABLE business_profile
+  ADD COLUMN IF NOT EXISTS google_calendar_auto_sync BOOLEAN DEFAULT true;
+
+ALTER TABLE scheduled_posts
+  ADD COLUMN IF NOT EXISTS google_event_id TEXT;
+
+CREATE TABLE IF NOT EXISTS google_tokens (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  access_token TEXT,
+  refresh_token TEXT,
+  expiry_date BIGINT,
+  email TEXT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE (user_id)
+);
+
+ALTER TABLE google_tokens ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users have full access" ON google_tokens
+  FOR ALL USING (auth.role() = 'authenticated');
+
+ALTER PUBLICATION supabase_realtime ADD TABLE scheduled_posts;
 ALTER PUBLICATION supabase_realtime ADD TABLE activities;
 ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
 ALTER PUBLICATION supabase_realtime ADD TABLE spaces;

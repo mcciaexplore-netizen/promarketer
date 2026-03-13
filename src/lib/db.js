@@ -163,3 +163,61 @@ export const updateBusinessProfile = async (updates) => {
         .select().single()
     return data
 }
+
+// ── SCHEDULER ────────────────────────────────
+export const getScheduledPosts = async () => {
+    const { data } = await supabase
+        .from('scheduled_posts')
+        .select('*, created_by(id, full_name, role)')
+        .order('scheduled_at', { ascending: true })
+    return data || []
+}
+
+export const createScheduledPost = async (post) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const payload = { ...post }
+    if (user?.id) payload.created_by = user.id
+
+    const { data } = await supabase
+        .from('scheduled_posts')
+        .insert(payload)
+        .select('*, created_by(id, full_name, role)')
+        .single()
+    return data
+}
+
+export const updateScheduledPost = async (id, updates) => {
+    const { data } = await supabase
+        .from('scheduled_posts')
+        .update(updates)
+        .eq('id', id)
+        .select('*, created_by(id, full_name, role)')
+        .single()
+    return data
+}
+
+export const deleteScheduledPost = async (id) => {
+    return supabase.from('scheduled_posts').delete().eq('id', id)
+}
+
+export const getGoogleCalendarStatus = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { connected: false }
+
+    const [{ data: token }, profile] = await Promise.all([
+        supabase
+            .from('google_tokens')
+            .select('access_token, refresh_token, expiry_date, email, created_at')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+        getBusinessProfile()
+    ])
+
+    const connected = Boolean(token?.access_token && token?.expiry_date && token.expiry_date > Date.now())
+    return {
+        connected,
+        email: token?.email || null,
+        autoSync: profile?.google_calendar_auto_sync ?? true,
+        expiryDate: token?.expiry_date || null
+    }
+}

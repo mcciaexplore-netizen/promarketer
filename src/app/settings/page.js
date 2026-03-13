@@ -9,10 +9,12 @@ import {
     CheckCircle2,
     Plus,
     RefreshCw,
-    MoreVertical
+    MoreVertical,
+    CalendarRange,
+    Loader2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getTeamMembers, getBusinessProfile, updateBusinessProfile } from '../../lib/db';
+import { getGoogleCalendarStatus, getTeamMembers, getBusinessProfile, updateBusinessProfile } from '../../lib/db';
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState('profile');
@@ -23,9 +25,16 @@ export default function SettingsPage() {
     const [teamLoading, setTeamLoading] = useState(false);
     const [isTestingGemini, setIsTestingGemini] = useState(false);
     const [geminiStatus, setGeminiStatus] = useState('idle');
+    const [googleCalendar, setGoogleCalendar] = useState({ connected: false, autoSync: true, email: null });
+    const [isSyncingAll, setIsSyncingAll] = useState(false);
+    const [isDisconnecting, setIsDisconnecting] = useState(false);
+    const [isSavingAutoSync, setIsSavingAutoSync] = useState(false);
 
     useEffect(() => {
-        getBusinessProfile().then(data => setProfile(data));
+        Promise.all([getBusinessProfile(), getGoogleCalendarStatus()]).then(([profileData, googleStatus]) => {
+            setProfile(profileData);
+            setGoogleCalendar(googleStatus);
+        });
     }, []);
 
     useEffect(() => {
@@ -71,6 +80,59 @@ export default function SettingsPage() {
             toast.error('Failed to save profile');
         } finally {
             setSavingProfile(false);
+        }
+    };
+
+    const refreshGoogleCalendarStatus = async () => {
+        const [profileData, googleStatus] = await Promise.all([getBusinessProfile(), getGoogleCalendarStatus()]);
+        setProfile(profileData);
+        setGoogleCalendar(googleStatus);
+    };
+
+    const handleToggleAutoSync = async () => {
+        setIsSavingAutoSync(true);
+        try {
+            await updateBusinessProfile({ google_calendar_auto_sync: !googleCalendar.autoSync });
+            await refreshGoogleCalendarStatus();
+            toast.success(`Auto-sync ${googleCalendar.autoSync ? 'disabled' : 'enabled'}`);
+        } catch {
+            toast.error('Failed to update auto-sync');
+        } finally {
+            setIsSavingAutoSync(false);
+        }
+    };
+
+    const handleSyncAllPosts = async () => {
+        setIsSyncingAll(true);
+        try {
+            const response = await fetch('/api/scheduler/sync-all', { method: 'POST' });
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Failed to sync scheduled posts');
+            }
+            toast.success('All scheduled posts synced to Google Calendar');
+            await refreshGoogleCalendarStatus();
+        } catch (error) {
+            toast.error(error.message);
+        } finally {
+            setIsSyncingAll(false);
+        }
+    };
+
+    const handleDisconnectGoogle = async () => {
+        setIsDisconnecting(true);
+        try {
+            const response = await fetch('/api/settings/google-calendar/disconnect', { method: 'POST' });
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Failed to disconnect Google Calendar');
+            }
+            toast.success('Google Calendar disconnected');
+            await refreshGoogleCalendarStatus();
+        } catch (error) {
+            toast.error(error.message);
+        } finally {
+            setIsDisconnecting(false);
         }
     };
 
@@ -317,6 +379,64 @@ export default function SettingsPage() {
                             </div>
 
                             <div className="p-5 sm:p-6 space-y-4">
+
+                                <div className="border border-[#E5E5E5] bg-white rounded-xl p-5 space-y-5">
+                                    <div className="flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-white rounded-lg shadow-sm border border-gray-200 flex items-center justify-center shrink-0">
+                                                <CalendarRange className="w-6 h-6 text-[#0176D3]" />
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <h4 className="font-bold text-text-primary">Google Calendar</h4>
+                                                    <span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase ${googleCalendar.connected ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                                        <span className={`h-2 w-2 rounded-full ${googleCalendar.connected ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                                                        {googleCalendar.connected ? 'Connected' : 'Disconnected'}
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm text-text-secondary mt-1">
+                                                    {googleCalendar.connected
+                                                        ? `Connected account: ${googleCalendar.email || 'Google account'}`
+                                                        : 'Connect Google Calendar so your team gets event reminders for scheduled posts.'}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {googleCalendar.connected ? (
+                                            <button className="btn-secondary !py-2 bg-white border-gray-300" onClick={handleDisconnectGoogle} disabled={isDisconnecting}>
+                                                {isDisconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                                                Disconnect
+                                            </button>
+                                        ) : (
+                                            <a href="/api/auth/google" className="btn-primary !py-2">
+                                                <CalendarRange className="w-4 h-4" />
+                                                Connect
+                                            </a>
+                                        )}
+                                    </div>
+
+                                    <div className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3">
+                                        <div>
+                                            <p className="font-semibold text-sm text-text-primary">Auto-sync new posts</p>
+                                            <p className="text-xs text-text-secondary mt-1">Default ON. Saves your preference to the business profile.</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className={`relative inline-flex h-7 w-12 items-center rounded-full transition ${googleCalendar.autoSync ? 'bg-primary' : 'bg-slate-300'} ${isSavingAutoSync ? 'opacity-60' : ''}`}
+                                            onClick={handleToggleAutoSync}
+                                            disabled={isSavingAutoSync}
+                                        >
+                                            <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${googleCalendar.autoSync ? 'translate-x-6' : 'translate-x-1'}`} />
+                                        </button>
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-3">
+                                        <button className="btn-primary !py-2" onClick={handleSyncAllPosts} disabled={!googleCalendar.connected || isSyncingAll}>
+                                            {isSyncingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                            Sync all posts
+                                        </button>
+                                    </div>
+                                </div>
 
                                 {/* Google Sheets */}
                                 <div className="border-2 border-primary border-[#E5E5E5] bg-primary/5 rounded-xl p-5 flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4">
