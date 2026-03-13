@@ -1,7 +1,6 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
 import {
     CalendarDays,
     CalendarRange,
@@ -134,7 +133,6 @@ const getInitialFormState = (date = new Date()) => ({
 })
 
 export default function SchedulerPage() {
-    const searchParams = useSearchParams()
     const handledQueryRef = useRef(false)
     const [currentDate, setCurrentDate] = useState(new Date())
     const [view, setView] = useState('calendar')
@@ -179,17 +177,23 @@ export default function SchedulerPage() {
 
     useEffect(() => {
         if (handledQueryRef.current) return
-        const connected = searchParams.get('connected')
-        const googleError = searchParams.get('google_error')
+        if (typeof window === 'undefined') return
+
+        const params = new URLSearchParams(window.location.search)
+        const connected = params.get('connected')
+        const googleError = params.get('google_error')
+
         if (connected === 'true') {
             handledQueryRef.current = true
             toast.success('Google Calendar connected!')
             loadSchedulerData()
+            window.history.replaceState({}, '', '/scheduler')
         } else if (googleError) {
             handledQueryRef.current = true
             toast.error(`Google Calendar connection failed: ${googleError}`)
+            window.history.replaceState({}, '', '/scheduler')
         }
-    }, [loadSchedulerData, searchParams])
+    }, [loadSchedulerData])
 
     const openCreatePanel = (date = new Date()) => {
         const initial = getInitialFormState(date)
