@@ -1,7 +1,8 @@
 "use client"
-import React from 'react';
+import React, { useState } from 'react';
 import { useLeads } from '../context';
-import { MoreVertical, ArrowUpDown, Download, Trash2, Edit3 } from 'lucide-react';
+import { MoreVertical, ArrowUpDown, Download, Trash2, Edit3, UserPlus, X } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 function StatusBadge({ status }) {
     const styles = {
@@ -19,9 +20,75 @@ function StatusBadge({ status }) {
     );
 }
 
+const EMPTY_FORM = { name: '', company: '', phone: '', email: '', source: '', status: 'NEW', deal_value: '' };
+
+function AddLeadPanel({ onClose }) {
+    const { addLead } = useLeads();
+    const [form, setForm] = useState(EMPTY_FORM);
+    const [saving, setSaving] = useState(false);
+
+    const handleSave = async () => {
+        console.log('[AddLeadPanel] Save clicked', form);
+        if (!form.name.trim() || !form.phone.trim()) {
+            toast.error('Name and phone are required');
+            return;
+        }
+        setSaving(true);
+        try {
+            await addLead({ ...form, deal_value: Number(form.deal_value) || 0 });
+            onClose();
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+            <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+            <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 z-10">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                    <h2 className="text-base font-bold text-[#0F172A]">Add New Lead</h2>
+                    <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+                <div className="px-5 py-4 grid grid-cols-2 gap-3">
+                    {[
+                        { label: 'Name *',    key: 'name',      type: 'text',   span: 2 },
+                        { label: 'Phone *',   key: 'phone',     type: 'tel',    span: 1 },
+                        { label: 'Email',     key: 'email',     type: 'email',  span: 1 },
+                        { label: 'Company',   key: 'company',   type: 'text',   span: 1 },
+                        { label: 'Deal Value',key: 'deal_value',type: 'number', span: 1 },
+                        { label: 'Source',    key: 'source',    type: 'text',   span: 2 },
+                    ].map(f => (
+                        <div key={f.key} className={f.span === 2 ? 'col-span-2' : ''}>
+                            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">{f.label}</label>
+                            <input
+                                type={f.type}
+                                value={form[f.key]}
+                                autoFocus={f.key === 'name'}
+                                onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
+                                onKeyDown={e => e.key === 'Enter' && handleSave()}
+                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0176D3] focus:border-transparent"
+                            />
+                        </div>
+                    ))}
+                </div>
+                <div className="flex justify-end gap-3 px-5 py-4 border-t border-gray-100">
+                    <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold text-[#475569] hover:bg-gray-100 rounded-lg">Cancel</button>
+                    <button type="button" onClick={handleSave} disabled={saving} className="px-5 py-2 text-sm font-semibold text-white rounded-lg disabled:opacity-50" style={{ backgroundColor: '#0176D3' }}>
+                        {saving ? 'Saving...' : 'Add Lead'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function ListView() {
     const { leads, setSelectedLead, deleteLead } = useLeads();
-    const [selectedRows, setSelectedRows] = React.useState([]);
+    const [selectedRows, setSelectedRows] = useState([]);
+    const [showAddLead, setShowAddLead] = useState(false);
 
     const toggleRow = (id) => {
         if (selectedRows.includes(id)) setSelectedRows(selectedRows.filter(r => r !== id));
@@ -35,6 +102,21 @@ export default function ListView() {
 
     return (
         <div className="h-full flex flex-col bg-white rounded-lg border border-[#E5E5E5] shadow-sm overflow-hidden select-text relative">
+
+            {/* Static toolbar: Add Lead */}
+            <div className="flex items-center justify-between px-4 py-2 border-b border-[#E5E5E5] bg-white shrink-0">
+                <span className="text-sm text-[#5E6C84] font-medium">{leads.length} leads</span>
+                <button
+                    type="button"
+                    onClick={() => { console.log('[ListView] + Add Lead clicked'); setShowAddLead(true); }}
+                    className="flex items-center gap-1.5 text-sm font-semibold text-white px-3 py-1.5 rounded-lg transition-colors"
+                    style={{ backgroundColor: '#0176D3' }}
+                >
+                    <UserPlus className="w-4 h-4" /> Add Lead
+                </button>
+            </div>
+
+            {showAddLead && <AddLeadPanel onClose={() => setShowAddLead(false)} />}
 
             {/* Toolbar */}
             {selectedRows.length > 0 && (

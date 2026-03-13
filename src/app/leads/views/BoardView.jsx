@@ -1,153 +1,486 @@
 "use client"
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useLeads, STATUS_COLUMNS } from '../context';
-import { MoreHorizontal, Plus, Briefcase, FileText } from 'lucide-react';
+import { COLUMN_COLORS, SOURCE_COLORS } from '../../../lib/constants';
+import { Plus, Building2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
+// ─── Source Badge ────────────────────────────────────────────────────────────
+function SourceBadge({ source }) {
+    const colors = SOURCE_COLORS[source] || { bg: '#F1F5F9', text: '#475569' };
+    return (
+        <span
+            style={{ backgroundColor: colors.bg, color: colors.text }}
+            className="text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap"
+        >
+            {source}
+        </span>
+    );
+}
+
+// ─── Kanban Card ─────────────────────────────────────────────────────────────
+function KanbanCard({ lead, index, isJustDropped, onSelect }) {
+    const cc = COLUMN_COLORS[lead.status] || COLUMN_COLORS.NEW;
+    const initial = lead.assignee?.full_name?.[0]?.toUpperCase() || '?';
+
+    return (
+        <Draggable draggableId={String(lead.id)} index={index}>
+            {(provided, snapshot) => {
+                // Append rotation/scale to dnd's own transform during drag
+                const baseTransform = provided.draggableProps.style?.transform || '';
+                const activeTransform = snapshot.isDragging
+                    ? `${baseTransform} rotate(2deg) scale(1.02)`
+                    : baseTransform;
+
+                return (
+                    <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        {...provided.dragHandleProps}
+                        onClick={() => { if (!snapshot.isDragging) onSelect(lead); }}
+                        className={isJustDropped ? 'card-drop-anim' : ''}
+                        style={{
+                            ...provided.draggableProps.style,
+                            transform: activeTransform,
+                            backgroundColor: 'white',
+                            borderRadius: '8px',
+                            borderLeft: `3px solid ${cc.border}`,
+                            boxShadow: snapshot.isDragging
+                                ? '0 16px 40px rgba(0,0,0,0.2)'
+                                : '0 1px 4px rgba(0,0,0,0.08)',
+                            padding: '14px 16px',
+                            marginBottom: '8px',
+                            cursor: snapshot.isDragging ? 'grabbing' : 'grab',
+                            opacity: snapshot.isDragging ? 0.95 : 1,
+                            transition: snapshot.isDragging
+                                ? 'none'
+                                : 'box-shadow 0.15s ease, transform 0.15s ease',
+                            userSelect: 'none',
+                        }}
+                    >
+                        {/* Row 1: Lead name */}
+                        <div style={{
+                            fontWeight: 700,
+                            fontSize: '15px',
+                            color: '#111',
+                            lineHeight: 1.3,
+                            marginBottom: '4px',
+                            overflow: 'hidden',
+                            whiteSpace: 'nowrap',
+                            textOverflow: 'ellipsis',
+                        }}>
+                            {lead.name}
+                        </div>
+
+                        {/* Row 2: Company */}
+                        {lead.company && (
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '12px',
+                                color: '#666',
+                                marginBottom: '10px',
+                                overflow: 'hidden',
+                            }}>
+                                <Building2 style={{ width: '12px', height: '12px', flexShrink: 0 }} />
+                                <span style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                                    {lead.company}
+                                </span>
+                            </div>
+                        )}
+
+                        {/* Row 3: Source + Deal value */}
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            marginBottom: '8px',
+                        }}>
+                            {lead.source
+                                ? <SourceBadge source={lead.source} />
+                                : <span />
+                            }
+                            {lead.deal_value > 0 && (
+                                <span style={{ fontSize: '12px', fontWeight: 600, color: '#0176D3' }}>
+                                    ₹{Number(lead.deal_value).toLocaleString()}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Row 4: Lead code + assignee avatar + status dot */}
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                        }}>
+                            <span style={{
+                                fontSize: '11px',
+                                fontWeight: 500,
+                                backgroundColor: '#F1F5F9',
+                                color: '#64748B',
+                                borderRadius: '99px',
+                                padding: '2px 8px',
+                            }}>
+                                {lead.lead_code || '—'}
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                {lead.assignee && (
+                                    <div
+                                        title={lead.assignee.full_name}
+                                        style={{
+                                            width: '28px',
+                                            height: '28px',
+                                            borderRadius: '50%',
+                                            backgroundColor: cc.border,
+                                            color: 'white',
+                                            fontSize: '11px',
+                                            fontWeight: 700,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                        }}
+                                    >
+                                        {initial}
+                                    </div>
+                                )}
+                                <div
+                                    title={lead.status}
+                                    style={{
+                                        width: '10px',
+                                        height: '10px',
+                                        borderRadius: '50%',
+                                        backgroundColor: cc.border,
+                                        flexShrink: 0,
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                );
+            }}
+        </Draggable>
+    );
+}
+
+// ─── Quick Add Form ──────────────────────────────────────────────────────────
+function QuickAddForm({ status, onAdd, onCancel }) {
+    const [form, setForm] = useState({ name: '', company: '' });
+    const cc = COLUMN_COLORS[status] || COLUMN_COLORS.NEW;
+
+    const handleSave = () => {
+        console.log('[QuickAddForm] Save clicked', { ...form, status });
+        if (!form.name.trim()) {
+            toast.error('Lead name is required');
+            return;
+        }
+        onAdd({ ...form, status });
+        setForm({ name: '', company: '' });
+    };
+
+    return (
+        <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            border: `1px solid ${cc.border}`,
+            boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+            padding: '12px',
+            marginBottom: '4px',
+        }}>
+            <input
+                autoFocus
+                type="text"
+                placeholder="Lead name *"
+                value={form.name}
+                onChange={e => setForm({ ...form, name: e.target.value })}
+                onKeyDown={e => {
+                    if (e.key === 'Enter') handleSave();
+                    if (e.key === 'Escape') onCancel();
+                }}
+                style={{
+                    width: '100%',
+                    border: `1px solid ${cc.border}`,
+                    borderRadius: '6px',
+                    padding: '6px 10px',
+                    fontSize: '13px',
+                    outline: 'none',
+                    marginBottom: '8px',
+                    boxSizing: 'border-box',
+                }}
+            />
+            <input
+                type="text"
+                placeholder="Company (optional)"
+                value={form.company}
+                onChange={e => setForm({ ...form, company: e.target.value })}
+                onKeyDown={e => e.key === 'Escape' && onCancel()}
+                style={{
+                    width: '100%',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '6px',
+                    padding: '6px 10px',
+                    fontSize: '13px',
+                    outline: 'none',
+                    marginBottom: '10px',
+                    boxSizing: 'border-box',
+                }}
+            />
+            <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                    type="button"
+                    onClick={handleSave}
+                    style={{
+                        flex: 1,
+                        backgroundColor: cc.border,
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '6px 0',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                    }}
+                >
+                    Save
+                </button>
+                <button
+                    type="button"
+                    onClick={onCancel}
+                    style={{
+                        backgroundColor: '#F1F5F9',
+                        color: '#64748B',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '6px 14px',
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                    }}
+                >
+                    Cancel
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// ─── Board View ──────────────────────────────────────────────────────────────
 export default function BoardView() {
     const { leads, updateLeadStatus, setSelectedLead, addLead } = useLeads();
     const [addingToCol, setAddingToCol] = useState(null);
-    const [newLeadForm, setNewLeadForm] = useState({ name: '', company: '' });
+    const [droppedCardId, setDroppedCardId] = useState(null);
+    const dropTimerRef = useRef(null);
 
     const onDragEnd = (result) => {
         if (!result.destination) return;
         const { source, destination, draggableId } = result;
-
+        console.log('[BoardView] onDragEnd', {
+            from: source.droppableId,
+            to: destination.droppableId,
+            id: draggableId,
+        });
         if (source.droppableId !== destination.droppableId) {
             updateLeadStatus(draggableId, destination.droppableId);
+            // Trigger drop animation
+            setDroppedCardId(draggableId);
+            if (dropTimerRef.current) clearTimeout(dropTimerRef.current);
+            dropTimerRef.current = setTimeout(() => setDroppedCardId(null), 300);
         }
     };
 
-    const handleQuickAdd = (e, col) => {
-        e.preventDefault();
-        if (newLeadForm.name) {
-            addLead({ ...newLeadForm, status: col });
-            setNewLeadForm({ name: '', company: '' });
-            setAddingToCol(null);
-        }
+    const handleQuickAdd = (leadData) => {
+        console.log('[BoardView] handleQuickAdd', leadData);
+        addLead(leadData);
+        setAddingToCol(null);
     };
 
     return (
-        <div className="flex h-full overflow-x-auto overflow-y-hidden bg-[#F4F5F7] p-2 rounded-xl custom-scrollbar gap-4 pb-4 select-none">
-            <DragDropContext onDragEnd={onDragEnd}>
-                {STATUS_COLUMNS.map((col) => {
-                    const colLeads = leads.filter(l => l.status === col);
+        <>
+            {/* Drop animation keyframes */}
+            <style>{`
+                @keyframes cardDrop {
+                    0%   { transform: scale(1.03); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+                    100% { transform: scale(1);    box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+                }
+                .card-drop-anim {
+                    animation: cardDrop 0.25s ease forwards;
+                }
+            `}</style>
 
-                    return (
-                        <div key={col} className="flex flex-col bg-[#EBECF0] w-[280px] shrink-0 rounded-lg max-h-full pb-2 shadow-sm">
+            <div
+                className="custom-scrollbar"
+                style={{
+                    background: '#F1F5F9',
+                    padding: '24px',
+                    display: 'flex',
+                    gap: '16px',
+                    height: '100%',
+                    overflowX: 'auto',
+                    overflowY: 'hidden',
+                    alignItems: 'flex-start',
+                    userSelect: 'none',
+                    paddingBottom: '32px',
+                }}
+            >
+                <DragDropContext onDragEnd={onDragEnd}>
+                    {STATUS_COLUMNS.map((col) => {
+                        const colLeads = leads.filter(l => l.status === col);
+                        const cc = COLUMN_COLORS[col] || COLUMN_COLORS.NEW;
 
-                            {/* Column Header */}
-                            <div className="p-3 pb-2 flex justify-between items-center group cursor-pointer sticky top-0 rounded-t-lg">
-                                <div className="flex items-center gap-2">
-                                    <h3 className="text-[11px] font-bold text-[#5E6C84] uppercase tracking-wide truncate">{col}</h3>
-                                    <span className="bg-[#DFE1E6] text-[#172B4D] text-[11px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                        return (
+                            <div
+                                key={col}
+                                style={{
+                                    minWidth: '280px',
+                                    maxWidth: '320px',
+                                    flexShrink: 0,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    maxHeight: 'calc(100vh - 200px)',
+                                }}
+                            >
+                                {/* ── Column Header ── */}
+                                <div style={{
+                                    borderRadius: '8px 8px 0 0',
+                                    padding: '12px 16px',
+                                    background: cc.headerBg,
+                                    borderTop: `3px solid ${cc.border}`,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    flexShrink: 0,
+                                }}>
+                                    <span style={{ fontSize: '15px' }}>{cc.icon}</span>
+                                    <h3 style={{
+                                        fontSize: '11px',
+                                        fontWeight: 700,
+                                        color: cc.text,
+                                        letterSpacing: '0.8px',
+                                        textTransform: 'uppercase',
+                                        flex: 1,
+                                    }}>
+                                        {col}
+                                    </h3>
+                                    <span style={{
+                                        backgroundColor: cc.badge,
+                                        color: cc.text,
+                                        borderRadius: '99px',
+                                        padding: '2px 8px',
+                                        fontSize: '11px',
+                                        fontWeight: 700,
+                                    }}>
                                         {colLeads.length}
                                     </span>
                                 </div>
-                                <button className="text-[#6B778C] hover:bg-[#DFE1E6] p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <MoreHorizontal className="w-4 h-4" />
-                                </button>
-                            </div>
 
-                            {/* Droppable Area */}
-                            <Droppable droppableId={col}>
-                                {(provided, snapshot) => (
-                                    <div
-                                        ref={provided.innerRef}
-                                        {...provided.droppableProps}
-                                        className={`flex-1 overflow-y-auto px-2 min-h-[50px] custom-scrollbar ${snapshot.isDraggingOver ? 'bg-blue-50/50' : ''}`}
-                                    >
-                                        {colLeads.map((lead, index) => (
-                                            <Draggable key={lead.id} draggableId={lead.id} index={index}>
-                                                {(provided, snapshot) => (
-                                                    <div
-                                                        ref={provided.innerRef}
-                                                        {...provided.draggableProps}
-                                                        {...provided.dragHandleProps}
-                                                        onClick={() => setSelectedLead(lead)}
-                                                        className={`
-                                group bg-white p-3 rounded shadow-sm mb-2 hover:bg-gray-50 border border-transparent hover:border-[#DFE1E6]
-                                ${snapshot.isDragging ? '!shadow-lg !rotate-[2deg] ring-1 ring-primary border-primary scale-[1.02]' : ''}
-                              `}
-                                                        style={provided.draggableProps.style}
-                                                    >
-                                                        <div className="flex justify-between items-start mb-1">
-                                                            <h4 className="font-semibold text-[14px] text-[#172B4D] leading-tight truncate pr-2">{lead.name}</h4>
-                                                            <button className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-gray-200 text-[#5E6C84]">
-                                                                <MoreHorizontal className="w-3.5 h-3.5" />
-                                                            </button>
-                                                        </div>
-                                                        <p className="text-[12px] text-[#5E6C84] mb-3 flex items-center gap-1"><Briefcase className="w-3 h-3" /> {lead.company}</p>
+                                {/* ── Column Body (droppable + create btn) ── */}
+                                <div style={{
+                                    background: cc.colBg,
+                                    border: `1px solid ${cc.border}33`,
+                                    borderTop: 'none',
+                                    borderRadius: '0 0 8px 8px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    flex: 1,
+                                    overflow: 'hidden',
+                                    padding: '8px',
+                                    gap: '0',
+                                }}>
+                                    <Droppable droppableId={col}>
+                                        {(provided, snapshot) => (
+                                            <div
+                                                ref={provided.innerRef}
+                                                {...provided.droppableProps}
+                                                className="custom-scrollbar"
+                                                style={{
+                                                    flex: 1,
+                                                    overflowY: 'auto',
+                                                    minHeight: '80px',
+                                                    borderRadius: '6px',
+                                                    background: snapshot.isDraggingOver
+                                                        ? `${cc.badge}80`
+                                                        : 'transparent',
+                                                    transition: 'background 0.15s ease',
+                                                    padding: snapshot.isDraggingOver ? '4px' : '0',
+                                                }}
+                                            >
+                                                {colLeads.map((lead, index) => (
+                                                    <KanbanCard
+                                                        key={lead.id}
+                                                        lead={lead}
+                                                        index={index}
+                                                        isJustDropped={droppedCardId === String(lead.id)}
+                                                        onSelect={setSelectedLead}
+                                                    />
+                                                ))}
+                                                {provided.placeholder}
 
-                                                        <div className="flex justify-between items-center">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-[11px] font-medium text-[#5E6C84] bg-[#DFE1E6] px-1.5 py-0.5 rounded">{lead.lead_code || '—'}</span>
-                                                                {lead.source && <span className="text-[10px] font-semibold text-white bg-indigo-500 px-1.5 py-0.5 rounded">{lead.source}</span>}
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                {lead.deal_value > 0 && <span className="text-[12px] font-semibold text-gray-700">₹{Number(lead.deal_value).toLocaleString()}</span>}
-                                                                {lead.assignee && (
-                                                                    <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-700 ml-1" title={lead.assignee.full_name}>
-                                                                        {lead.assignee.full_name?.[0] || '?'}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
+                                                {/* Empty state */}
+                                                {colLeads.length === 0 && !snapshot.isDraggingOver && addingToCol !== col && (
+                                                    <div style={{
+                                                        background: `${cc.badge}4D`,
+                                                        border: `2px dashed ${cc.border}66`,
+                                                        borderRadius: '8px',
+                                                        padding: '32px 16px',
+                                                        textAlign: 'center',
+                                                        margin: '4px 0',
+                                                    }}>
+                                                        <div style={{ fontSize: '24px', marginBottom: '8px' }}>{cc.icon}</div>
+                                                        <p style={{ color: cc.text, fontSize: '12px', fontWeight: 500, opacity: 0.8 }}>
+                                                            Drop leads here
+                                                        </p>
                                                     </div>
                                                 )}
-                                            </Draggable>
-                                        ))}
-                                        {provided.placeholder}
-
-                                        {colLeads.length === 0 && !snapshot.isDraggingOver && (
-                                            <div className="border border-dashed border-[#C1C7D0] rounded-lg p-4 m-2 flex flex-col items-center justify-center text-center opacity-50">
-                                                <FileText className="w-6 h-6 text-[#5E6C84] mb-2" />
-                                                <p className="text-[11px] font-semibold text-[#5E6C84]">Drop leads here</p>
                                             </div>
                                         )}
+                                    </Droppable>
+
+                                    {/* ── Create / Quick-add ── */}
+                                    <div style={{ flexShrink: 0, marginTop: '6px' }}>
+                                        {addingToCol === col ? (
+                                            <QuickAddForm
+                                                status={col}
+                                                onAdd={handleQuickAdd}
+                                                onCancel={() => setAddingToCol(null)}
+                                            />
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    console.log('[BoardView] + Create clicked for column:', col);
+                                                    setAddingToCol(col);
+                                                }}
+                                                style={{
+                                                    width: '100%',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '6px',
+                                                    padding: '8px',
+                                                    border: `1px dashed ${cc.border}99`,
+                                                    borderRadius: '6px',
+                                                    backgroundColor: 'transparent',
+                                                    color: cc.border,
+                                                    fontSize: '13px',
+                                                    fontWeight: 500,
+                                                    cursor: 'pointer',
+                                                    transition: 'background 0.15s ease',
+                                                }}
+                                                onMouseEnter={e => { e.currentTarget.style.background = cc.badge; }}
+                                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                                            >
+                                                <Plus style={{ width: '14px', height: '14px' }} />
+                                                Create
+                                            </button>
+                                        )}
                                     </div>
-                                )}
-                            </Droppable>
-
-                            {/* Quick Add Footer */}
-                            <div className="px-2 pt-2">
-                                {addingToCol === col ? (
-                                    <form onSubmit={(e) => handleQuickAdd(e, col)} className="bg-white p-2 rounded shadow-sm">
-                                        <input
-                                            autoFocus
-                                            type="text"
-                                            placeholder="Lead name..."
-                                            className="w-full text-sm border-2 border-primary rounded p-1 mb-2 outline-none"
-                                            value={newLeadForm.name}
-                                            onChange={e => setNewLeadForm({ ...newLeadForm, name: e.target.value })}
-                                            required
-                                        />
-                                        <input
-                                            type="text"
-                                            placeholder="Company (optional)"
-                                            className="w-full text-sm border border-gray-200 rounded p-1 mb-2 outline-none"
-                                            value={newLeadForm.company}
-                                            onChange={e => setNewLeadForm({ ...newLeadForm, company: e.target.value })}
-                                        />
-                                        <div className="flex gap-2">
-                                            <button type="submit" className="btn-primary !py-1 !px-2 text-xs flex-1">Save</button>
-                                            <button type="button" onClick={() => setAddingToCol(null)} className="btn-secondary !py-1 !px-2 text-xs border-none bg-gray-100">Cancel</button>
-                                        </div>
-                                    </form>
-                                ) : (
-                                    <button
-                                        className="w-full flex items-center gap-1 hover:bg-[#DFE1E6] text-[#5E6C84] text-[13px] font-medium p-2 rounded transition-colors"
-                                        onClick={() => setAddingToCol(col)}
-                                    >
-                                        <Plus className="w-4 h-4" /> Create
-                                    </button>
-                                )}
+                                </div>
                             </div>
-
-                        </div>
-                    );
-                })}
-            </DragDropContext>
-        </div>
+                        );
+                    })}
+                </DragDropContext>
+            </div>
+        </>
     );
 }
