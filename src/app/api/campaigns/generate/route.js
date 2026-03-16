@@ -30,8 +30,7 @@ const getProfileFromClient = async (supabase) => {
     const { data: profiles, error } = await supabase
         .from('business_profile')
         .select('*')
-        .order('updated_at', { ascending: false })
-        .limit(20)
+        .order('updated_at', { ascending: false, nullsFirst: false })
 
     if (error) throw error
     return pickBestBusinessProfile(profiles)
@@ -307,6 +306,12 @@ export async function POST(request) {
         }
 
         const { gemini, openai, activeProvider, profile } = await getApiKeys()
+        console.log('[api/campaigns/generate] key lookup:', {
+            activeProvider,
+            hasGemini: Boolean(gemini),
+            hasOpenAI: Boolean(openai),
+            profileId: profile?.id || null,
+        })
 
         const providerOrder = activeProvider === 'openai'
             ? [
