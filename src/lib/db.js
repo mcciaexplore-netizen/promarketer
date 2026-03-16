@@ -151,28 +151,21 @@ export const markNotificationRead = async (id) => {
 
 // ── BUSINESS PROFILE ──────────────────────────
 export const getBusinessProfile = async () => {
-    const { data } = await supabase
-        .from('business_profile').select('*').single()
+    const res = await fetch('/api/profile', { cache: 'no-store' })
+    const { data } = await res.json()
     return data
 }
 
 export const updateBusinessProfile = async (updates) => {
-    const profile = await getBusinessProfile()
-    console.log('[updateBusinessProfile] existing profile:', profile?.id, 'updates:', Object.keys(updates))
-    if (profile?.id) {
-        const { data, error } = await supabase
-            .from('business_profile').update(updates)
-            .eq('id', profile.id)
-            .select().single()
-        if (error) throw error
-        return data
-    } else {
-        const { data, error } = await supabase
-            .from('business_profile').insert(updates)
-            .select().single()
-        if (error) throw error
-        return data
-    }
+    console.log('[updateBusinessProfile] updates:', Object.keys(updates))
+    const res = await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+    })
+    const { data, error } = await res.json()
+    if (error) throw new Error(error)
+    return data
 }
 
 // ── SCHEDULER ────────────────────────────────
