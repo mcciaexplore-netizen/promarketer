@@ -28,8 +28,12 @@ export default function SettingsPage() {
     const fileInputRef = useRef(null);
     const [team, setTeam] = useState([]);
     const [teamLoading, setTeamLoading] = useState(false);
-    const [isTestingGemini, setIsTestingGemini] = useState(false);
-    const [geminiStatus, setGeminiStatus] = useState('idle');
+    const [apiKeys, setApiKeys] = useState({ gemini: '', openai: '', grok: '' });
+    const [apiStatuses, setApiStatuses] = useState({ gemini: 'idle', openai: 'idle', grok: 'idle' }); // idle | testing | success | error
+    const [apiMessages, setApiMessages] = useState({ gemini: '', openai: '', grok: '' });
+    const [savingKey, setSavingKey] = useState({ gemini: false, openai: false, grok: false });
+    const [activeProvider, setActiveProvider] = useState('gemini');
+    const [switchingProvider, setSwitchingProvider] = useState(false);
     const [googleCalendar, setGoogleCalendar] = useState({ connected: false, autoSync: true, email: null });
     const [storageStatus, setStorageStatus] = useState({ supabaseConnected: true, sheetsConfigured: false, campaignStorageProvider: 'supabase' });
     const [isSyncingAll, setIsSyncingAll] = useState(false);
@@ -45,6 +49,14 @@ export default function SettingsPage() {
         ]).then(([profileData, googleStatus, storageResult]) => {
             setProfile(profileData);
             if (profileData?.logo_url) setLogoUrl(profileData.logo_url);
+            if (profileData) {
+                setApiKeys({
+                    gemini: profileData.gemini_api_key || '',
+                    openai: profileData.openai_api_key || '',
+                    grok: profileData.grok_api_key || '',
+                });
+                if (profileData.active_ai_provider) setActiveProvider(profileData.active_ai_provider);
+            }
             setGoogleCalendar(googleStatus);
             if (storageResult.success) setStorageStatus(storageResult.data);
         });
@@ -60,14 +72,61 @@ export default function SettingsPage() {
         }
     }, [activeTab]);
 
-    const handleTestGemini = () => {
-        setIsTestingGemini(true);
-        setGeminiStatus('idle');
-        setTimeout(() => {
-            setIsTestingGemini(false);
-            setGeminiStatus('success');
-            toast.success("Connection to Gemini API successful!");
-        }, 1500);
+    const handleTestKey = async (provider) => {
+        const key = apiKeys[provider];
+        if (!key?.trim()) { toast.error('Enter an API key first'); return; }
+        setApiStatuses(prev => ({ ...prev, [provider]: 'testing' }));
+        setApiMessages(prev => ({ ...prev, [provider]: '' }));
+        console.log(`[handleTestKey] testing ${provider}`);
+        try {
+            const res = await fetch('/api/test-connection', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ provider, key }),
+            });
+            const result = await res.json();
+            if (result.success) {
+                setApiStatuses(prev => ({ ...prev, [provider]: 'success' }));
+                setApiMessages(prev => ({ ...prev, [provider]: result.message }));
+            } else {
+                setApiStatuses(prev => ({ ...prev, [provider]: 'error' }));
+                setApiMessages(prev => ({ ...prev, [provider]: result.error }));
+            }
+        } catch (err) {
+            setApiStatuses(prev => ({ ...prev, [provider]: 'error' }));
+            setApiMessages(prev => ({ ...prev, [provider]: err.message }));
+        }
+    };
+
+    const handleSaveKey = async (provider) => {
+        const key = apiKeys[provider];
+        setSavingKey(prev => ({ ...prev, [provider]: true }));
+        const fieldMap = { gemini: 'gemini_api_key', openai: 'openai_api_key', grok: 'grok_api_key' };
+        console.log(`[handleSaveKey] saving ${provider}`);
+        try {
+            await updateBusinessProfile({ [fieldMap[provider]]: key });
+            toast.success(`${provider.charAt(0).toUpperCase() + provider.slice(1)} API key saved!`);
+        } catch (err) {
+            console.error(`[handleSaveKey] error:`, err);
+            toast.error('Failed to save key: ' + (err?.message || 'unknown error'));
+        } finally {
+            setSavingKey(prev => ({ ...prev, [provider]: false }));
+        }
+    };
+
+    const handleSwitchProvider = async (provider) => {
+        if (provider === activeProvider) return;
+        setSwitchingProvider(true);
+        console.log(`[handleSwitchProvider] switching to ${provider}`);
+        try {
+            await updateBusinessProfile({ active_ai_provider: provider });
+            setActiveProvider(provider);
+            toast.success(`Active AI provider switched to ${provider.charAt(0).toUpperCase() + provider.slice(1)}`);
+        } catch (err) {
+            toast.error('Failed to switch provider: ' + (err?.message || 'unknown error'));
+        } finally {
+            setSwitchingProvider(false);
+        }
     };
 
     const handleInvite = () => {
@@ -328,49 +387,100 @@ export default function SettingsPage() {
                         <div className="animate-in fade-in duration-300">
                             <div className="p-5 border-b border-[#E5E5E5] bg-gray-50/50">
                                 <h3 className="font-bold text-lg">AI Providers</h3>
-                                <p className="text-sm text-text-secondary mt-1">Manage your keys for text and generation engines.</p>
+                                <p className="text-sm text-text-secondary mt-1">Add your API keys and choose which provider powers content generation.</p>
                             </div>
 
                             <div className="p-5 sm:p-6 space-y-6">
 
-                                {/* Gemini Key */}
-                                <div className="border border-gray-200 rounded-xl p-5 hover:border-gray-300 transition-colors">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center gap-2">
-                                            <h4 className="font-bold text-text-primary">Google Gemini API</h4>
-                                            {geminiStatus === 'success' && <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Active</span>}
-                                        </div>
-                                    </div>
-                                    <p className="text-sm text-text-secondary mb-4 max-w-xl">Used as the primary brain for Competitor Analysis, CRM Insights, and Content generation.</p>
-
-                                    <div className="flex gap-3 items-start">
-                                        <input type="password" placeholder="AIZA*******************" className="input-field font-mono text-sm max-w-sm" defaultValue="AIZAxxxxxxxxxxxxxxxxx" />
-                                        <button className="btn-secondary !py-2 bg-white" onClick={handleTestGemini} disabled={isTestingGemini}>
-                                            {isTestingGemini ? <RefreshCw className="w-4 h-4 animate-spin text-primary" /> : "Test Connection"}
-                                        </button>
-                                        <button className="btn-primary !py-2">Save</button>
-                                    </div>
-                                    {geminiStatus === 'success' && (
-                                        <p className="text-sm mt-3 text-success flex items-center gap-1.5">
-                                            <CheckCircle2 className="w-4 h-4" /> Successfully queried `gemini-1.5-pro` model.
-                                        </p>
-                                    )}
-                                </div>
-
-                                {/* OpenAI Key */}
-                                <div className="border border-gray-200 rounded-xl p-5 hover:border-gray-300 transition-colors bg-gray-50/30">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center gap-2">
-                                            <h4 className="font-bold text-text-primary">OpenAI API (Optional)</h4>
-                                        </div>
-                                    </div>
-                                    <p className="text-sm text-text-secondary mb-4 max-w-xl">Fallback or alternative provider for text generation.</p>
-
-                                    <div className="flex gap-3 items-start">
-                                        <input type="password" placeholder="sk-..." className="input-field font-mono text-sm max-w-sm" />
-                                        <button className="btn-primary !py-2 opacity-50 cursor-not-allowed">Save</button>
+                                {/* Active Provider Selector */}
+                                <div className="rounded-xl border border-slate-200 p-4">
+                                    <p className="font-semibold text-sm text-text-primary mb-1">Active AI Provider</p>
+                                    <p className="text-xs text-text-secondary mb-3">Switch between providers when credits run out or for different use cases.</p>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {[
+                                            { id: 'gemini', label: 'Google Gemini', color: 'text-blue-600' },
+                                            { id: 'openai', label: 'OpenAI', color: 'text-emerald-600' },
+                                            { id: 'grok', label: 'xAI Grok', color: 'text-purple-600' },
+                                        ].map(p => (
+                                            <button
+                                                key={p.id}
+                                                type="button"
+                                                onClick={() => handleSwitchProvider(p.id)}
+                                                disabled={switchingProvider}
+                                                className={`rounded-xl border px-4 py-3 text-sm font-semibold transition flex flex-col items-center gap-1 ${activeProvider === p.id ? 'border-primary bg-primary/5 text-primary' : 'border-slate-200 text-slate-600 hover:border-slate-300'} disabled:opacity-50`}
+                                            >
+                                                {activeProvider === p.id && <span className="w-2 h-2 rounded-full bg-primary" />}
+                                                {p.label}
+                                                {activeProvider === p.id && <span className="text-[10px] font-bold uppercase text-primary">Active</span>}
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
+
+                                {/* Provider cards */}
+                                {[
+                                    {
+                                        id: 'gemini',
+                                        name: 'Google Gemini API',
+                                        placeholder: 'AIza...',
+                                        desc: 'Powers Competitor Analysis, CRM Insights, and Content generation.',
+                                        docsLabel: 'aistudio.google.com',
+                                    },
+                                    {
+                                        id: 'openai',
+                                        name: 'OpenAI API',
+                                        placeholder: 'sk-...',
+                                        desc: 'Use GPT-4o and other OpenAI models as your generation engine.',
+                                        docsLabel: 'platform.openai.com',
+                                    },
+                                    {
+                                        id: 'grok',
+                                        name: 'xAI Grok API',
+                                        placeholder: 'xai-...',
+                                        desc: "xAI's Grok models — great alternative when other credits run dry.",
+                                        docsLabel: 'console.x.ai',
+                                    },
+                                ].map(provider => {
+                                    const status = apiStatuses[provider.id];
+                                    const msg = apiMessages[provider.id];
+                                    const isSaving = savingKey[provider.id];
+                                    const isTesting = status === 'testing';
+                                    const isActive = activeProvider === provider.id;
+                                    return (
+                                        <div key={provider.id} className={`border rounded-xl p-5 transition-colors ${isActive ? 'border-primary/40 bg-primary/[0.02]' : 'border-gray-200 hover:border-gray-300'}`}>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <h4 className="font-bold text-text-primary">{provider.name}</h4>
+                                                    {isActive && <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded uppercase flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" /> Active</span>}
+                                                    {status === 'success' && <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase">Verified</span>}
+                                                    {status === 'error' && <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded uppercase">Failed</span>}
+                                                </div>
+                                            </div>
+                                            <p className="text-sm text-text-secondary mb-4 max-w-xl">{provider.desc}</p>
+                                            <div className="flex gap-3 items-center flex-wrap">
+                                                <input
+                                                    type="password"
+                                                    placeholder={provider.placeholder}
+                                                    className="input-field font-mono text-sm max-w-xs"
+                                                    value={apiKeys[provider.id]}
+                                                    onChange={e => setApiKeys(prev => ({ ...prev, [provider.id]: e.target.value }))}
+                                                />
+                                                <button type="button" className="btn-secondary !py-2 bg-white" onClick={() => handleTestKey(provider.id)} disabled={isTesting || isSaving}>
+                                                    {isTesting ? <RefreshCw className="w-4 h-4 animate-spin text-primary" /> : 'Test'}
+                                                </button>
+                                                <button type="button" className="btn-primary !py-2" onClick={() => handleSaveKey(provider.id)} disabled={isSaving || isTesting}>
+                                                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+                                                </button>
+                                            </div>
+                                            {msg && (
+                                                <p className={`text-sm mt-3 flex items-center gap-1.5 ${status === 'success' ? 'text-green-600' : 'text-red-500'}`}>
+                                                    {status === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <span className="w-4 h-4 shrink-0 text-lg leading-none">✕</span>}
+                                                    {msg}
+                                                </p>
+                                            )}
+                                        </div>
+                                    );
+                                })}
 
                             </div>
                         </div>
