@@ -33,7 +33,7 @@ export async function POST(request) {
             const res = await fetch('https://api.x.ai/v1/chat/completions', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${key.trim()}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: 'grok-3', messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 })
+                body: JSON.stringify({ model: 'grok-4-latest', messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 })
             });
             const data = await res.json();
             console.log('[test-connection] grok raw response:', JSON.stringify(data));
