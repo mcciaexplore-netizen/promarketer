@@ -10,6 +10,41 @@ const sampleByPlatform = {
     WhatsApp: 'A concise update with a strong hook, key detail, and a direct CTA.'
 }
 
+const STOP_WORDS = new Set([
+    'a', 'an', 'and', 'are', 'as', 'at', 'be', 'for', 'from', 'have', 'helping', 'in', 'into', 'is', 'it',
+    'its', 'of', 'on', 'or', 'our', 'that', 'the', 'their', 'them', 'there', 'they', 'this', 'to', 'we',
+    'were', 'with', 'your', 'you', 'new', 'day', 'days', 'business'
+])
+
+const extractCampaignAnchors = (campaignGoal) => {
+    const normalized = campaignGoal.toLowerCase().replace(/[^a-z0-9\s']/g, ' ')
+    const words = normalized
+        .split(/\s+/)
+        .map((word) => word.trim())
+        .filter((word) => word.length >= 4 && !STOP_WORDS.has(word))
+
+    return [...new Set(words)].slice(0, 8)
+}
+
+const normalizeMessage = (message) => message
+    .replace(/^["'\s]+|["'\s]+$/g, '')
+    .replace(/\r\n/g, '\n')
+    .trim()
+
+const isGenericWhatsAppMessage = (message, anchors) => {
+    const normalized = message.toLowerCase().trim()
+    const startsGeneric = /^(dear|hello|hi|greetings)\s+\{customername\}/.test(normalized)
+    const genericPhrases = [
+        'hope you are having a productive week',
+        'we are excited',
+        'hope you are doing well',
+        'trust you are doing well'
+    ]
+    const containsGenericPhrase = genericPhrases.some((phrase) => normalized.includes(phrase))
+    const matchingAnchors = anchors.filter((anchor) => normalized.includes(anchor.toLowerCase()))
+    return startsGeneric || containsGenericPhrase || matchingAnchors.length < Math.min(2, anchors.length)
+}
+
 const buildWhatsAppPrompt = ({ tone, campaignGoal, broadcastMode, businessName, industry, city }) => {
     const toneInstructions = {
         Friendly: `Use warm, conversational language.
@@ -81,6 +116,23 @@ The CTA should feel practical, for example: book a free consultation, reply to t
 
 Return ONLY the WhatsApp message text.`
 }
+
+const buildWhatsAppRetryPrompt = ({ originalPrompt, firstDraft, anchors }) => `Your previous output was too generic and did not use the campaign details strongly enough.
+
+Original instructions:
+${originalPrompt}
+
+Previous draft:
+${firstDraft}
+
+Rewrite it now so that it:
+- clearly mentions at least 2 of these campaign-specific details: ${anchors.join(', ')}
+- does NOT start with Dear/Hello/Hi/Greetings
+- does NOT use generic lines like "Hope you're having a productive week"
+- feels like a real WhatsApp outreach message, not an email
+- ends with a practical CTA
+
+Return ONLY the improved WhatsApp message text.`
 
 const callGemini = async (apiKey, prompt) => {
     const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash']
@@ -165,6 +217,23 @@ const callOpenAI = async (apiKey, prompt) => {
     const text = data.choices?.[0]?.message?.content
     if (!text) throw new Error('OpenAI returned empty response')
     return text.trim()
+}
+
+const generateWhatsAppMessage = async ({ provider, prompt, anchors }) => {
+    const firstDraft = normalizeMessage(await provider.fn(provider.key, prompt))
+
+    if (!anchors.length || !isGenericWhatsAppMessage(firstDraft, anchors)) {
+        return firstDraft
+    }
+
+    console.log(`[api/generate] ${provider.id} draft too generic, retrying with anchors:`, anchors)
+    const retryPrompt = buildWhatsAppRetryPrompt({
+        originalPrompt: prompt,
+        firstDraft,
+        anchors
+    })
+
+    return normalizeMessage(await provider.fn(provider.key, retryPrompt))
 }
 
 const normalizeProvider = (provider) => {
@@ -296,7 +365,9 @@ export async function POST(request) {
                 industry: profile?.industry || null,
                 city: profile?.city || null
             })
+            const anchors = extractCampaignAnchors(campaignGoal)
             console.log('[api/generate] whatsapp prompt:', prompt)
+            console.log('[api/generate] whatsapp anchors:', anchors)
 
             const providerOrder = activeProvider === 'openai'
                 ? [
@@ -311,7 +382,7 @@ export async function POST(request) {
             for (const provider of providerOrder) {
                 if (!provider.key) continue
                 try {
-                    const message = await provider.fn(provider.key, prompt)
+                    const message = await generateWhatsAppMessage({ provider, prompt, anchors })
                     return NextResponse.json({ message, provider: provider.id, keySource: source })
                 } catch (providerError) {
                     console.error(`[api/generate] ${provider.id} failed:`, providerError.message)
