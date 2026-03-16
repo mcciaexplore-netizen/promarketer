@@ -138,16 +138,19 @@ const callOpenAI = async (apiKey, prompt) => {
     return text.trim()
 }
 
+const normalizeProvider = (provider) => {
+    if (provider === 'openai') return 'openai'
+    return 'gemini'
+}
+
 const getApiKeys = async () => {
-    if (process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY) {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
         return {
             gemini: process.env.GEMINI_API_KEY || null,
-            openai: process.env.OPENAI_API_KEY || null
+            openai: process.env.OPENAI_API_KEY || null,
+            activeProvider: normalizeProvider(process.env.ACTIVE_AI_PROVIDER),
+            source: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY ? 'env' : 'none'
         }
-    }
-
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        return { gemini: null, openai: null }
     }
 
     const supabase = createClient(
@@ -155,19 +158,41 @@ const getApiKeys = async () => {
         process.env.SUPABASE_SERVICE_ROLE_KEY
     )
 
-    const { data: profile, error } = await supabase
+    const { data: profiles, error } = await supabase
         .from('business_profile')
-        .select('gemini_api_key, openai_api_key')
-        .single()
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1)
 
     if (error) {
         console.error('[api/generate] failed to load business_profile keys:', error.message)
-        return { gemini: null, openai: null }
+        return {
+            gemini: process.env.GEMINI_API_KEY || null,
+            openai: process.env.OPENAI_API_KEY || null,
+            activeProvider: normalizeProvider(process.env.ACTIVE_AI_PROVIDER),
+            source: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY ? 'env' : 'none'
+        }
+    }
+
+    const profile = Array.isArray(profiles) ? profiles[0] : null
+
+    const profileGemini = profile?.gemini_api_key?.trim() || null
+    const profileOpenAI = profile?.openai_api_key?.trim() || null
+
+    if (profileGemini || profileOpenAI) {
+        return {
+            gemini: profileGemini,
+            openai: profileOpenAI,
+            activeProvider: normalizeProvider(profile?.active_ai_provider),
+            source: 'business_profile'
+        }
     }
 
     return {
-        gemini: profile?.gemini_api_key || null,
-        openai: profile?.openai_api_key || null
+        gemini: process.env.GEMINI_API_KEY || null,
+        openai: process.env.OPENAI_API_KEY || null,
+        activeProvider: normalizeProvider(process.env.ACTIVE_AI_PROVIDER),
+        source: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY ? 'env' : 'none'
     }
 }
 
@@ -192,7 +217,8 @@ export async function POST(request) {
             topic
         })
 
-        const { gemini, openai } = await getApiKeys()
+        const { gemini, openai, activeProvider, source } = await getApiKeys()
+        console.log('[api/generate] key source + provider:', { source, activeProvider, hasGemini: Boolean(gemini), hasOpenAI: Boolean(openai) })
 
         if (type === 'whatsapp') {
             if (!campaignGoal.trim()) {
@@ -202,14 +228,24 @@ export async function POST(request) {
             const prompt = buildWhatsAppPrompt({ tone, campaignGoal: campaignGoal.trim(), broadcastMode })
             console.log('[api/generate] whatsapp prompt:', prompt)
 
-            if (gemini) {
-                const message = await callGemini(gemini, prompt)
-                return NextResponse.json({ message, provider: 'gemini' })
-            }
+            const providerOrder = activeProvider === 'openai'
+                ? [
+                    { id: 'openai', key: openai, fn: callOpenAI },
+                    { id: 'gemini', key: gemini, fn: callGemini }
+                ]
+                : [
+                    { id: 'gemini', key: gemini, fn: callGemini },
+                    { id: 'openai', key: openai, fn: callOpenAI }
+                ]
 
-            if (openai) {
-                const message = await callOpenAI(openai, prompt)
-                return NextResponse.json({ message, provider: 'openai' })
+            for (const provider of providerOrder) {
+                if (!provider.key) continue
+                try {
+                    const message = await provider.fn(provider.key, prompt)
+                    return NextResponse.json({ message, provider: provider.id, keySource: source })
+                } catch (providerError) {
+                    console.error(`[api/generate] ${provider.id} failed:`, providerError.message)
+                }
             }
 
             return NextResponse.json(
