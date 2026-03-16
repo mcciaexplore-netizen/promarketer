@@ -18,30 +18,90 @@ const getGoogleColorId = (platform) => ({
     WhatsApp: '2'
 })[platform] || '8'
 
-const parseScheduledAt = (value) => {
-    if (!value) return new Date()
-    if (value instanceof Date) return value
-    if (typeof value === 'string' && value.includes('T') && (value.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(value))) {
-        return new Date(value)
+const getKolkataPartsFromInstant = (value) => {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    })
+
+    const parts = Object.fromEntries(formatter.formatToParts(value).map((part) => [part.type, part.value]))
+    return {
+        year: Number(parts.year),
+        month: Number(parts.month),
+        day: Number(parts.day),
+        hours: Number(parts.hour),
+        minutes: Number(parts.minute),
+        seconds: Number(parts.second)
+    }
+}
+
+const parseScheduledAtParts = (value) => {
+    if (!value) {
+        const now = new Date()
+        return {
+            year: now.getFullYear(),
+            month: now.getMonth() + 1,
+            day: now.getDate(),
+            hours: now.getHours(),
+            minutes: now.getMinutes(),
+            seconds: now.getSeconds()
+        }
     }
 
-    return new Date(String(value).trim().replace(' ', 'T'))
+    if (value instanceof Date) {
+        return {
+            year: value.getFullYear(),
+            month: value.getMonth() + 1,
+            day: value.getDate(),
+            hours: value.getHours(),
+            minutes: value.getMinutes(),
+            seconds: value.getSeconds()
+        }
+    }
+
+    const raw = String(value).trim()
+    const localMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/)
+    if (localMatch) {
+        return {
+            year: Number(localMatch[1]),
+            month: Number(localMatch[2]),
+            day: Number(localMatch[3]),
+            hours: Number(localMatch[4]),
+            minutes: Number(localMatch[5]),
+            seconds: Number(localMatch[6] || '0')
+        }
+    }
+
+    const instantMatch = raw.match(/Z$|[+-]\d{2}:\d{2}$/)
+    if (instantMatch) {
+        return getKolkataPartsFromInstant(new Date(raw))
+    }
+
+    const normalized = raw.replace(' ', 'T')
+    return parseScheduledAtParts(`${normalized}:00`)
 }
 
 const toGoogleCalendarDateTime = (date) => {
-    const value = parseScheduledAt(date)
-    const year = value.getFullYear()
-    const month = String(value.getMonth() + 1).padStart(2, '0')
-    const day = String(value.getDate()).padStart(2, '0')
-    const hours = String(value.getHours()).padStart(2, '0')
-    const minutes = String(value.getMinutes()).padStart(2, '0')
-    const seconds = String(value.getSeconds()).padStart(2, '0')
+    const value = parseScheduledAtParts(date)
+    const year = value.year
+    const month = String(value.month).padStart(2, '0')
+    const day = String(value.day).padStart(2, '0')
+    const hours = String(value.hours).padStart(2, '0')
+    const minutes = String(value.minutes).padStart(2, '0')
+    const seconds = String(value.seconds).padStart(2, '0')
 
     return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+05:30`
 }
 
 const buildEvent = (post) => {
-    const startTime = parseScheduledAt(post.scheduled_at)
+    const startParts = parseScheduledAtParts(post.scheduled_at)
+    const startTime = new Date(startParts.year, startParts.month - 1, startParts.day, startParts.hours, startParts.minutes, startParts.seconds, 0)
     const endTime = new Date(startTime.getTime() + 30 * 60000)
     const emoji = (post.platforms || []).map((platform) => platformEmojis[platform] || '📢').join('')
 
