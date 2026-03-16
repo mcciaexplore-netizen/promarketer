@@ -30,14 +30,15 @@ export async function POST(request) {
         }
 
         if (provider === 'grok') {
-            const res = await fetch('https://api.x.ai/v1/models', {
-                method: 'GET',
-                headers: { Authorization: `Bearer ${key.trim()}` }
+            const res = await fetch('https://api.x.ai/v1/chat/completions', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${key.trim()}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: 'grok-beta', messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`);
-            const model = data?.data?.[0]?.id || 'grok-beta';
-            return NextResponse.json({ success: true, message: `Connected — found model ${model}` });
+            const model = data?.model || 'grok-beta';
+            return NextResponse.json({ success: true, message: `Connected — using ${model}` });
         }
 
         return NextResponse.json({ success: false, error: 'Unknown provider' }, { status: 400 });
