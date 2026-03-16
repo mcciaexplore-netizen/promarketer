@@ -9,7 +9,7 @@ const sampleByPlatform = {
     WhatsApp: 'A concise update with a strong hook, key detail, and a direct CTA.'
 }
 
-const buildWhatsAppPrompt = ({ tone, campaignGoal, broadcastMode }) => {
+const buildWhatsAppPrompt = ({ tone, campaignGoal, broadcastMode, businessName, industry, city }) => {
     const toneInstructions = {
         Friendly: `Use warm, conversational language.
 Use 1-2 relevant emojis. Feel like a friend texting.
@@ -17,7 +17,7 @@ Avoid corporate language.`,
         Professional: `Use clear, business-appropriate language.
 Minimal emojis (max 1).
 Concise and credible tone.
-Sound like a trusted business partner.`,
+Sound like a trusted business advisor, not a formal letter.`,
         Urgent: `Create strong urgency without being pushy.
 Use time-sensitive language (limited time, expires soon, last chance).
 Use urgency emojis sparingly (for example: ⏰ 🔥).
@@ -34,26 +34,49 @@ Make it feel personal despite being a broadcast.`
 Use {CustomerName} to personalize.
 Make it feel like a genuine individual message.`
 
-    return `You are an expert WhatsApp marketing copywriter for Indian businesses.
+    const brandContext = [
+        businessName ? `Business/Brand Name: ${businessName}` : null,
+        industry ? `Industry: ${industry}` : null,
+        city ? `City/Market: ${city}` : null
+    ].filter(Boolean).join('\n')
 
-Campaign Goal: ${campaignGoal}
+    return `You are an expert WhatsApp marketing copywriter for Indian businesses.
+You write messages that sound human, specific, and high-conversion.
+You NEVER write like a generic email template.
+
+${brandContext ? `${brandContext}\n` : ''}Campaign Goal: ${campaignGoal}
 
 Tone: ${tone}
-Tone Instructions: ${toneInstructions[tone] || toneInstructions.Friendly}
+Tone Instructions:
+${toneInstructions[tone] || toneInstructions.Friendly}
 
-Message Type: ${broadcastNote}
+Message Type:
+${broadcastNote}
+
+Your job:
+1. Read the campaign goal carefully.
+2. Identify the actual business offer, audience, and CTA from it.
+3. Write a WhatsApp message that clearly mentions the real initiative or offer from the goal.
+4. Make the message sound natural for WhatsApp, not like a brochure or email.
 
 Write ONE complete WhatsApp message that:
 - Directly addresses the campaign goal above
-- Is between 50-160 words
+- Is between 70-140 words
 - Has a clear call-to-action at the end
 - Uses {CustomerName} at least once for personalization
 - Only uses {ProductName} and {OfferAmount} if they are relevant
 - Feels authentic and NOT like a generic template
 - Is written specifically for the campaign goal provided
+- Includes the real names/details from the campaign goal when available
+- Sounds like something a founder, consultant, or business growth partner would send on WhatsApp
 
 IMPORTANT: Generate a unique message based on the campaign goal: "${campaignGoal}".
 Do NOT return a generic template.
+Do NOT start with "Dear {CustomerName}".
+Do NOT say "We are excited" unless the campaign goal truly sounds celebratory.
+Do NOT write in stiff corporate language.
+If the goal mentions a program, organization, or audience like "Applied AI", "MSMEs", "AI adoption", or "MCCIA", include those details naturally.
+The CTA should feel practical, for example: book a free consultation, reply to this message, or schedule a quick call.
 
 Return ONLY the WhatsApp message text.`
 }
@@ -72,12 +95,17 @@ const callGemini = async (apiKey, prompt) => {
                     'x-goog-api-key': apiKey
                 },
                 body: JSON.stringify({
+                    systemInstruction: {
+                        parts: [{
+                            text: 'You are an expert conversion copywriter for WhatsApp campaigns in India. Write specific, natural, persuasive WhatsApp messages and avoid generic corporate phrasing.'
+                        }]
+                    },
                     contents: [{ parts: [{ text: prompt }] }],
                     generationConfig: {
-                        temperature: 0.85,
+                        temperature: 0.95,
                         topK: 40,
                         topP: 0.95,
-                        maxOutputTokens: 300
+                        maxOutputTokens: 400
                     },
                     safetySettings: [
                         { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
@@ -114,16 +142,16 @@ const callOpenAI = async (apiKey, prompt) => {
             Authorization: `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-            model: 'gpt-3.5-turbo',
+            model: 'gpt-4o-mini',
             messages: [
                 {
                     role: 'system',
-                    content: 'You are an expert WhatsApp marketing copywriter for Indian businesses. You write concise, high-conversion WhatsApp messages.'
+                    content: 'You are an expert WhatsApp marketing copywriter for Indian businesses. You write specific, natural, high-conversion WhatsApp messages and avoid generic email-style intros.'
                 },
                 { role: 'user', content: prompt }
             ],
-            temperature: 0.85,
-            max_tokens: 300
+            temperature: 0.95,
+            max_tokens: 400
         })
     })
 
@@ -149,7 +177,8 @@ const getApiKeys = async () => {
             gemini: process.env.GEMINI_API_KEY || null,
             openai: process.env.OPENAI_API_KEY || null,
             activeProvider: normalizeProvider(process.env.ACTIVE_AI_PROVIDER),
-            source: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY ? 'env' : 'none'
+            source: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY ? 'env' : 'none',
+            profile: null
         }
     }
 
@@ -170,7 +199,8 @@ const getApiKeys = async () => {
             gemini: process.env.GEMINI_API_KEY || null,
             openai: process.env.OPENAI_API_KEY || null,
             activeProvider: normalizeProvider(process.env.ACTIVE_AI_PROVIDER),
-            source: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY ? 'env' : 'none'
+            source: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY ? 'env' : 'none',
+            profile: null
         }
     }
 
@@ -184,7 +214,8 @@ const getApiKeys = async () => {
             gemini: profileGemini,
             openai: profileOpenAI,
             activeProvider: normalizeProvider(profile?.active_ai_provider),
-            source: 'business_profile'
+            source: 'business_profile',
+            profile
         }
     }
 
@@ -192,7 +223,8 @@ const getApiKeys = async () => {
         gemini: process.env.GEMINI_API_KEY || null,
         openai: process.env.OPENAI_API_KEY || null,
         activeProvider: normalizeProvider(process.env.ACTIVE_AI_PROVIDER),
-        source: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY ? 'env' : 'none'
+        source: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY ? 'env' : 'none',
+        profile
     }
 }
 
@@ -217,7 +249,7 @@ export async function POST(request) {
             topic
         })
 
-        const { gemini, openai, activeProvider, source } = await getApiKeys()
+        const { gemini, openai, activeProvider, source, profile } = await getApiKeys()
         console.log('[api/generate] key source + provider:', { source, activeProvider, hasGemini: Boolean(gemini), hasOpenAI: Boolean(openai) })
 
         if (type === 'whatsapp') {
@@ -225,7 +257,14 @@ export async function POST(request) {
                 return NextResponse.json({ error: 'Campaign goal is required.' }, { status: 400 })
             }
 
-            const prompt = buildWhatsAppPrompt({ tone, campaignGoal: campaignGoal.trim(), broadcastMode })
+            const prompt = buildWhatsAppPrompt({
+                tone,
+                campaignGoal: campaignGoal.trim(),
+                broadcastMode,
+                businessName: profile?.business_name || null,
+                industry: profile?.industry || null,
+                city: profile?.city || null
+            })
             console.log('[api/generate] whatsapp prompt:', prompt)
 
             const providerOrder = activeProvider === 'openai'
