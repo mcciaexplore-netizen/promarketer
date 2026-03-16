@@ -36,8 +36,12 @@ export async function POST(request) {
                 body: JSON.stringify({ model: 'grok-2-latest', messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 })
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`);
-            const model = data?.model || 'grok-beta';
+            console.log('[test-connection] grok raw response:', JSON.stringify(data));
+            if (!res.ok) {
+                const errMsg = data?.error?.message || data?.error || data?.message || JSON.stringify(data) || `HTTP ${res.status}`;
+                throw new Error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
+            }
+            const model = data?.model || 'grok-2-latest';
             return NextResponse.json({ success: true, message: `Connected — using ${model}` });
         }
 
