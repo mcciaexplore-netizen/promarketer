@@ -431,6 +431,8 @@ export async function POST(request) {
             const fallbackOrder = ['gemini', 'openai', 'grok'].filter((p) => p !== activeProvider)
             const providerOrder = [activeProvider, ...fallbackOrder].map((p) => allProviders[p]).filter(Boolean)
 
+            const providerErrors = []
+
             for (const provider of providerOrder) {
                 if (!provider.key) continue
                 try {
@@ -453,21 +455,20 @@ export async function POST(request) {
                         city: profile?.city || null,
                         brief
                     })
-                    console.log('[api/generate] whatsapp prompt:', prompt)
 
                     const message = await generateWhatsAppMessage({ provider, prompt, anchors })
                     return NextResponse.json({ message, provider: provider.id, keySource: source })
                 } catch (providerError) {
-                    console.error(`[api/generate] ${provider.id} failed:`, providerError.message)
+                    const msg = `${provider.id}: ${providerError.message}`
+                    console.error(`[api/generate] ${msg}`)
+                    providerErrors.push(msg)
                 }
             }
 
-            const diagMsg = `No API key found. Profile row: ${profile?.id ? 'exists' : 'MISSING'}. Keys in DB — Gemini: ${Boolean(gemini)}, OpenAI: ${Boolean(openai)}, Grok: ${Boolean(grok)}. Active provider: ${activeProvider}. Go to Settings → API Keys and save your key.`
-            console.error('[api/generate] ' + diagMsg)
-            return NextResponse.json(
-                { error: diagMsg },
-                { status: 400 }
-            )
+            const errDetail = providerErrors.length
+                ? providerErrors.join(' | ')
+                : `No keys found — Gemini: ${Boolean(gemini)}, OpenAI: ${Boolean(openai)}, Grok: ${Boolean(grok)}`
+            return NextResponse.json({ error: errDetail }, { status: 400 })
         }
 
         const baseTopic = topic.trim() || 'your latest campaign'
