@@ -241,15 +241,25 @@ const normalizeProvider = (provider) => {
     return 'gemini'
 }
 
+const pickBestBusinessProfile = (profiles = []) => {
+    if (!Array.isArray(profiles) || !profiles.length) return null
+
+    const withKeys = profiles.find((profile) =>
+        Boolean(profile?.gemini_api_key?.trim() || profile?.openai_api_key?.trim())
+    )
+
+    return withKeys || profiles[0] || null
+}
+
 const getProfileFromClient = async (supabase) => {
     const { data: profiles, error } = await supabase
         .from('business_profile')
         .select('*')
         .order('updated_at', { ascending: false })
-        .limit(1)
+        .limit(20)
 
     if (error) throw error
-    return Array.isArray(profiles) ? profiles[0] : null
+    return pickBestBusinessProfile(profiles)
 }
 
 const getApiKeys = async () => {
