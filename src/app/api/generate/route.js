@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getSupabaseRoute } from '@/lib/supabaseRoute'
 
 const sampleByPlatform = {
     Instagram: 'A behind-the-scenes moment that makes your brand feel human and worth following.',
@@ -171,7 +172,41 @@ const normalizeProvider = (provider) => {
     return 'gemini'
 }
 
+const getProfileFromClient = async (supabase) => {
+    const { data: profiles, error } = await supabase
+        .from('business_profile')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+
+    if (error) throw error
+    return Array.isArray(profiles) ? profiles[0] : null
+}
+
 const getApiKeys = async () => {
+    try {
+        const supabase = getSupabaseRoute()
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (user) {
+            const profile = await getProfileFromClient(supabase)
+            const profileGemini = profile?.gemini_api_key?.trim() || null
+            const profileOpenAI = profile?.openai_api_key?.trim() || null
+
+            if (profileGemini || profileOpenAI) {
+                return {
+                    gemini: profileGemini,
+                    openai: profileOpenAI,
+                    activeProvider: normalizeProvider(profile?.active_ai_provider),
+                    source: 'business_profile',
+                    profile
+                }
+            }
+        }
+    } catch (error) {
+        console.error('[api/generate] route client profile lookup failed:', error.message)
+    }
+
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
         return {
             gemini: process.env.GEMINI_API_KEY || null,
@@ -187,13 +222,11 @@ const getApiKeys = async () => {
         process.env.SUPABASE_SERVICE_ROLE_KEY
     )
 
-    const { data: profiles, error } = await supabase
-        .from('business_profile')
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .limit(1)
+    let profile = null
 
-    if (error) {
+    try {
+        profile = await getProfileFromClient(supabase)
+    } catch (error) {
         console.error('[api/generate] failed to load business_profile keys:', error.message)
         return {
             gemini: process.env.GEMINI_API_KEY || null,
@@ -203,8 +236,6 @@ const getApiKeys = async () => {
             profile: null
         }
     }
-
-    const profile = Array.isArray(profiles) ? profiles[0] : null
 
     const profileGemini = profile?.gemini_api_key?.trim() || null
     const profileOpenAI = profile?.openai_api_key?.trim() || null
