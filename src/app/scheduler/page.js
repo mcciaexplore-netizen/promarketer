@@ -175,7 +175,7 @@ const toTimeInputValue = (date) => {
 }
 
 const buildScheduledAt = (dateString, timeString) => {
-    return `${dateString} ${timeString}:00`
+    return `${dateString}T${timeString}:00+05:30`
 }
 
 const getPlatformIcon = (platform, className = 'w-4 h-4', color) => {
