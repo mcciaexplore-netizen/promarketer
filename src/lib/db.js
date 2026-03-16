@@ -224,7 +224,7 @@ export const getGoogleCalendarStatus = async () => {
         getBusinessProfile()
     ])
 
-    const connected = Boolean(token?.access_token && token?.expiry_date && token.expiry_date > Date.now())
+    const connected = Boolean(token?.access_token || token?.refresh_token)
     return {
         connected,
         email: token?.email || null,

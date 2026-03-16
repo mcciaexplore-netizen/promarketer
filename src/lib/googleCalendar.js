@@ -18,6 +18,18 @@ const getGoogleColorId = (platform) => ({
     WhatsApp: '2'
 })[platform] || '8'
 
+const toGoogleCalendarDateTime = (date) => {
+    const value = new Date(date)
+    const year = value.getFullYear()
+    const month = String(value.getMonth() + 1).padStart(2, '0')
+    const day = String(value.getDate()).padStart(2, '0')
+    const hours = String(value.getHours()).padStart(2, '0')
+    const minutes = String(value.getMinutes()).padStart(2, '0')
+    const seconds = String(value.getSeconds()).padStart(2, '0')
+
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+05:30`
+}
+
 const buildEvent = (post) => {
     const startTime = new Date(post.scheduled_at)
     const endTime = new Date(startTime.getTime() + 30 * 60000)
@@ -26,8 +38,8 @@ const buildEvent = (post) => {
     return {
         summary: `${emoji} ${(post.platforms || []).join(' + ')} Post`,
         description: `Caption: ${post.caption || ''}\n\nStatus: ${post.status || 'Scheduled'}\n\nManage in ProMarketer: ${APP_URL}/scheduler`,
-        start: { dateTime: startTime.toISOString(), timeZone: 'Asia/Kolkata' },
-        end: { dateTime: endTime.toISOString(), timeZone: 'Asia/Kolkata' },
+        start: { dateTime: toGoogleCalendarDateTime(startTime), timeZone: 'Asia/Kolkata' },
+        end: { dateTime: toGoogleCalendarDateTime(endTime), timeZone: 'Asia/Kolkata' },
         colorId: getGoogleColorId(post.platforms?.[0]),
         reminders: {
             useDefault: false,
@@ -76,7 +88,10 @@ export const deleteCalendarEvent = async (tokens, googleEventId) => {
 }
 
 export const refreshTokenIfNeeded = async (userId, tokens, supabase) => {
-    if (Date.now() < (tokens.expiry_date || 0) - 60000) return tokens
+    if (tokens?.access_token && Date.now() < (tokens.expiry_date || 0) - 60000) return tokens
+    if (!tokens?.refresh_token) {
+        throw new Error('Google Calendar token is missing a refresh token. Please reconnect Google Calendar.')
+    }
 
     const auth = getOAuthClient()
     auth.setCredentials(tokens)

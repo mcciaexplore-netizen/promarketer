@@ -28,6 +28,12 @@ export async function GET(request) {
         const { tokens } = await oauth2Client.getToken(code)
         oauth2Client.setCredentials(tokens)
 
+        const { data: existingTokens } = await supabase
+            .from('google_tokens')
+            .select('refresh_token')
+            .eq('user_id', user.id)
+            .maybeSingle()
+
         const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client })
         const { data: googleProfile } = await oauth2.userinfo.get()
 
@@ -36,7 +42,7 @@ export async function GET(request) {
             .upsert({
                 user_id: user.id,
                 access_token: tokens.access_token,
-                refresh_token: tokens.refresh_token,
+                refresh_token: tokens.refresh_token || existingTokens?.refresh_token || null,
                 expiry_date: tokens.expiry_date,
                 email: googleProfile.email
             }, { onConflict: 'user_id' })

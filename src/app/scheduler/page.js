@@ -308,7 +308,7 @@ export default function SchedulerPage() {
             setForm(getInitialFormState())
             await loadSchedulerData()
 
-            if (googleStatus.connected && googleStatus.autoSync !== false) {
+            if (googleStatus.autoSync !== false) {
                 await syncPostToGoogle(savedPost.id, { force: false })
             }
         } catch (error) {

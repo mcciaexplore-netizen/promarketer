@@ -30,7 +30,7 @@ export async function POST(request) {
             return NextResponse.json({ success: false, error: 'Post not found' }, { status: 404 })
         }
 
-        if (!tokens?.access_token) {
+        if (!tokens?.access_token && !tokens?.refresh_token) {
             return NextResponse.json({ success: false, error: 'Google Calendar not connected' }, { status: 400 })
         }
 
