@@ -90,20 +90,29 @@ const formatTime = (value) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+const parseScheduledAt = (value) => {
+    if (!value) return new Date()
+    if (value instanceof Date) return value
+    if (typeof value === 'string' && value.includes('T') && (value.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(value))) {
+        return new Date(value)
+    }
+
+    const normalized = String(value).trim().replace(' ', 'T')
+    return new Date(normalized)
+}
+
 const toDateInputValue = (date) => {
-    const value = new Date(date)
+    const value = parseScheduledAt(date)
     return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
 }
 
 const toTimeInputValue = (date) => {
-    const value = new Date(date)
+    const value = parseScheduledAt(date)
     return `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`
 }
 
 const buildScheduledAt = (dateString, timeString) => {
-    const [year, month, day] = dateString.split('-').map(Number)
-    const [hours, minutes] = timeString.split(':').map(Number)
-    return new Date(year, month - 1, day, hours, minutes, 0, 0).toISOString()
+    return `${dateString} ${timeString}:00`
 }
 
 const getPlatformIcon = (platform, className = 'w-4 h-4', color) => {
@@ -216,7 +225,7 @@ export default function SchedulerPage() {
     }
 
     const currentMonthPosts = posts.filter((post) => {
-        const scheduledAt = new Date(post.scheduled_at)
+        const scheduledAt = parseScheduledAt(post.scheduled_at)
         return scheduledAt.getMonth() === currentMonth && scheduledAt.getFullYear() === currentYear
     })
 
@@ -229,7 +238,7 @@ export default function SchedulerPage() {
         const date = new Date(currentYear, currentMonth, dayNumber)
         const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
         const datePosts = currentMonthPosts.filter((post) => {
-            const scheduledAt = new Date(post.scheduled_at)
+            const scheduledAt = parseScheduledAt(post.scheduled_at)
             return scheduledAt.getDate() === dayNumber
         })
         return { date, dayNumber, dateKey, posts: datePosts }
@@ -238,7 +247,7 @@ export default function SchedulerPage() {
     const sortedPosts = [...posts].sort((a, b) => {
         if (sortBy === 'status') return a.status.localeCompare(b.status)
         if (sortBy === 'platform') return (a.platforms?.[0] || '').localeCompare(b.platforms?.[0] || '')
-        return new Date(a.scheduled_at) - new Date(b.scheduled_at)
+        return parseScheduledAt(a.scheduled_at) - parseScheduledAt(b.scheduled_at)
     })
 
     const handleFieldChange = (field, value) => {
@@ -608,7 +617,7 @@ export default function SchedulerPage() {
                                                 {new Date(post.scheduled_at).toLocaleDateString()}
                                             </td>
                                             <td className="px-6 py-4 text-sm text-text-primary">
-                                                {new Date(post.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                {parseScheduledAt(post.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[post.status] || statusClasses.Scheduled}`}>

@@ -18,8 +18,18 @@ const getGoogleColorId = (platform) => ({
     WhatsApp: '2'
 })[platform] || '8'
 
+const parseScheduledAt = (value) => {
+    if (!value) return new Date()
+    if (value instanceof Date) return value
+    if (typeof value === 'string' && value.includes('T') && (value.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(value))) {
+        return new Date(value)
+    }
+
+    return new Date(String(value).trim().replace(' ', 'T'))
+}
+
 const toGoogleCalendarDateTime = (date) => {
-    const value = new Date(date)
+    const value = parseScheduledAt(date)
     const year = value.getFullYear()
     const month = String(value.getMonth() + 1).padStart(2, '0')
     const day = String(value.getDate()).padStart(2, '0')
@@ -31,7 +41,7 @@ const toGoogleCalendarDateTime = (date) => {
 }
 
 const buildEvent = (post) => {
-    const startTime = new Date(post.scheduled_at)
+    const startTime = parseScheduledAt(post.scheduled_at)
     const endTime = new Date(startTime.getTime() + 30 * 60000)
     const emoji = (post.platforms || []).map((platform) => platformEmojis[platform] || '📢').join('')
 
