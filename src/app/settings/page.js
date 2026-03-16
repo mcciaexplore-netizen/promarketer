@@ -30,7 +30,6 @@ export default function SettingsPage() {
     const [activeProvider, setActiveProvider] = useState('gemini');
     const [switchingProvider, setSwitchingProvider] = useState(false);
     const [googleCalendar, setGoogleCalendar] = useState({ connected: false, autoSync: true, email: null });
-    const [storageStatus, setStorageStatus] = useState({ supabaseConnected: true, sheetsConfigured: false, campaignStorageProvider: 'supabase' });
     const [isSyncingAll, setIsSyncingAll] = useState(false);
     const [isDisconnecting, setIsDisconnecting] = useState(false);
     const [isSavingAutoSync, setIsSavingAutoSync] = useState(false);
@@ -39,8 +38,7 @@ export default function SettingsPage() {
         Promise.all([
             getBusinessProfile(),
             getGoogleCalendarStatus(),
-            fetch('/api/settings/storage-status').then((res) => res.json()).catch(() => ({ success: false }))
-        ]).then(([profileData, googleStatus, storageResult]) => {
+        ]).then(([profileData, googleStatus]) => {
             setProfile(profileData);
             if (profileData?.logo_url) setLogoUrl(profileData.logo_url);
             if (profileData) {
@@ -52,7 +50,6 @@ export default function SettingsPage() {
                 if (profileData.active_ai_provider) setActiveProvider(profileData.active_ai_provider);
             }
             setGoogleCalendar(googleStatus);
-            if (storageResult.success) setStorageStatus(storageResult.data);
         });
     }, []);
 
@@ -166,14 +163,12 @@ export default function SettingsPage() {
     };
 
     const refreshGoogleCalendarStatus = async () => {
-        const [profileData, googleStatus, storageResult] = await Promise.all([
+        const [profileData, googleStatus] = await Promise.all([
             getBusinessProfile(),
             getGoogleCalendarStatus(),
-            fetch('/api/settings/storage-status').then((res) => res.json()).catch(() => ({ success: false }))
         ]);
         setProfile(profileData);
         setGoogleCalendar(googleStatus);
-        if (storageResult.success) setStorageStatus(storageResult.data);
     };
 
     const handleToggleAutoSync = async () => {
@@ -220,23 +215,6 @@ export default function SettingsPage() {
             toast.error(error.message);
         } finally {
             setIsDisconnecting(false);
-        }
-    };
-
-    const handleStorageProviderChange = async (provider) => {
-        setIsSavingStorageProvider(true);
-        try {
-            if ((provider === 'sheets' || provider === 'both') && !storageStatus.sheetsConfigured) {
-                throw new Error('Google Sheets is not configured in server environment variables');
-            }
-
-            await updateBusinessProfile({ campaign_storage_provider: provider });
-            await refreshGoogleCalendarStatus();
-            toast.success(`Campaigns will now save to ${provider === 'both' ? 'Supabase and Google Sheets' : provider === 'sheets' ? 'Google Sheets' : 'Supabase'}`);
-        } catch (error) {
-            toast.error(error.message || 'Failed to update storage provider');
-        } finally {
-            setIsSavingStorageProvider(false);
         }
     };
 
