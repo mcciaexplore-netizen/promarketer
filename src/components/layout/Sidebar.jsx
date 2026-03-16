@@ -13,9 +13,11 @@ import {
     ChevronDown,
     ChevronRight,
     Plus,
+    Trash2,
 } from 'lucide-react';
 import clsx from 'clsx';
-import { getSpaces } from '../../lib/db';
+import toast from 'react-hot-toast';
+import { deleteSpace, getSpaces } from '../../lib/db';
 import CreateSpaceModal from '../ui/CreateSpaceModal';
 
 const NAV_ITEMS = [
@@ -33,6 +35,7 @@ export default function Sidebar() {
     const [leadsExpanded, setLeadsExpanded] = useState(true);
     const [spaces, setSpaces] = useState([]);
     const [createSpaceModalOpen, setCreateSpaceModalOpen] = useState(false);
+    const [deletingSpaceId, setDeletingSpaceId] = useState(null);
 
     useEffect(() => {
         getSpaces().then(data => setSpaces(data || []));
@@ -46,6 +49,40 @@ export default function Sidebar() {
         // Navigate to the new space
         router.push(`/leads?space=${newSpace.id}&view=board`);
     };
+
+    const handleDeleteSpace = async (space) => {
+        if (spaces.length <= 1) {
+            toast.error('You need at least one space')
+            return
+        }
+
+        const confirmed = window.confirm(`Delete "${space.name}"? All leads in this space will be deleted too.`)
+        if (!confirmed) return
+
+        setDeletingSpaceId(space.id)
+        try {
+            await deleteSpace(space.id)
+            const remainingSpaces = spaces.filter((item) => item.id !== space.id)
+            setSpaces(remainingSpaces)
+            toast.success('Space deleted')
+
+            if (pathname.startsWith('/leads') && window.location.search.includes(`space=${space.id}`)) {
+                const nextSpace = remainingSpaces[0]
+                if (nextSpace) {
+                    router.push(`/leads?space=${nextSpace.id}&view=board`)
+                } else {
+                    router.push('/leads')
+                }
+            } else {
+                router.refresh()
+            }
+        } catch (error) {
+            console.error('[Sidebar] delete space error:', error)
+            toast.error('Failed to delete space')
+        } finally {
+            setDeletingSpaceId(null)
+        }
+    }
 
     return (
         <>
@@ -106,24 +143,41 @@ export default function Sidebar() {
                                 {spaces.map((space) => {
                                     const dotColor = space.color || '#0176D3';
                                     return (
-                                        <Link
+                                        <div
                                             key={space.id}
-                                            href={`/leads?space=${space.id}&view=board`}
-                                            className="group flex gap-x-2 rounded-md p-1.5 text-[13px] leading-5 font-medium text-[#B3C5DF] hover:text-white hover:bg-[#1a3350] transition-colors items-center"
+                                            className="group flex items-center gap-1 rounded-md hover:bg-[#1a3350] transition-colors"
                                         >
-                                            {/* Colored dot using the space's color */}
-                                            <span
-                                                style={{
-                                                    width: '8px',
-                                                    height: '8px',
-                                                    borderRadius: '50%',
-                                                    backgroundColor: dotColor,
-                                                    flexShrink: 0,
-                                                    opacity: 0.9,
+                                            <Link
+                                                href={`/leads?space=${space.id}&view=board`}
+                                                className="flex min-w-0 flex-1 gap-x-2 rounded-md p-1.5 text-[13px] leading-5 font-medium text-[#B3C5DF] hover:text-white transition-colors items-center"
+                                            >
+                                                <span
+                                                    style={{
+                                                        width: '8px',
+                                                        height: '8px',
+                                                        borderRadius: '50%',
+                                                        backgroundColor: dotColor,
+                                                        flexShrink: 0,
+                                                        opacity: 0.9,
+                                                    }}
+                                                />
+                                                <span className="truncate">{space.name}</span>
+                                            </Link>
+
+                                            <button
+                                                type="button"
+                                                onClick={(event) => {
+                                                    event.preventDefault()
+                                                    event.stopPropagation()
+                                                    handleDeleteSpace(space)
                                                 }}
-                                            />
-                                            <span className="truncate">{space.name}</span>
-                                        </Link>
+                                                disabled={deletingSpaceId === space.id}
+                                                className="mr-1 flex h-7 w-7 items-center justify-center rounded-md text-[#8FA5C2] opacity-0 transition hover:bg-[#24466d] hover:text-white group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-100"
+                                                title={`Delete ${space.name}`}
+                                            >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                            </button>
+                                        </div>
                                     );
                                 })}
 
