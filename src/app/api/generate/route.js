@@ -31,6 +31,23 @@ const normalizeMessage = (message) => message
     .replace(/\r\n/g, '\n')
     .trim()
 
+const safeParseJson = (value) => {
+    try {
+        return JSON.parse(value)
+    } catch {
+        return null
+    }
+}
+
+const buildFallbackBrief = (campaignGoal, anchors) => ({
+    coreOffer: campaignGoal,
+    targetAudience: anchors.slice(0, 3).join(', ') || 'prospective customers',
+    mainBenefit: 'clear business value and a practical next step',
+    callToAction: 'Reply to this message to book a quick consultation',
+    mustMention: anchors.slice(0, 5),
+    objective: 'Generate a WhatsApp message grounded in the exact campaign goal'
+})
+
 const isGenericWhatsAppMessage = (message, anchors) => {
     const normalized = message.toLowerCase().trim()
     const startsGeneric = /^(dear|hello|hi|greetings)\s+\{customername\}/.test(normalized)
@@ -45,7 +62,39 @@ const isGenericWhatsAppMessage = (message, anchors) => {
     return startsGeneric || containsGenericPhrase || matchingAnchors.length < Math.min(2, anchors.length)
 }
 
-const buildWhatsAppPrompt = ({ tone, campaignGoal, broadcastMode, businessName, industry, city }) => {
+const buildCampaignBriefPrompt = ({ campaignGoal, businessName, industry, city, anchors }) => {
+    const brandContext = [
+        businessName ? `Business/Brand Name: ${businessName}` : null,
+        industry ? `Industry: ${industry}` : null,
+        city ? `City/Market: ${city}` : null
+    ].filter(Boolean).join('\n')
+
+    return `You are extracting a marketing brief from a user's campaign goal for a WhatsApp marketing message.
+
+${brandContext ? `${brandContext}\n` : ''}Campaign Goal:
+${campaignGoal}
+
+Likely campaign keywords:
+${anchors.join(', ') || 'none provided'}
+
+Return ONLY valid JSON with this exact shape:
+{
+  "coreOffer": "string",
+  "targetAudience": "string",
+  "mainBenefit": "string",
+  "callToAction": "string",
+  "mustMention": ["string", "string"],
+  "objective": "string"
+}
+
+Rules:
+- Be specific, not generic
+- Use real names and organizations from the goal when present
+- Keep each field concise
+- "mustMention" should include the exact campaign-specific terms that should appear in the final WhatsApp message`
+}
+
+const buildWhatsAppPrompt = ({ tone, campaignGoal, broadcastMode, businessName, industry, city, brief }) => {
     const toneInstructions = {
         Friendly: `Use warm, conversational language.
 Use 1-2 relevant emojis. Feel like a friend texting.
@@ -82,6 +131,14 @@ You NEVER write like a generic email template.
 
 ${brandContext ? `${brandContext}\n` : ''}Campaign Goal: ${campaignGoal}
 
+Extracted Brief:
+- Objective: ${brief.objective}
+- Core Offer: ${brief.coreOffer}
+- Target Audience: ${brief.targetAudience}
+- Main Benefit: ${brief.mainBenefit}
+- CTA: ${brief.callToAction}
+- Must Mention: ${(brief.mustMention || []).join(', ')}
+
 Tone: ${tone}
 Tone Instructions:
 ${toneInstructions[tone] || toneInstructions.Friendly}
@@ -109,10 +166,14 @@ Write ONE complete WhatsApp message that:
 IMPORTANT: Generate a unique message based on the campaign goal: "${campaignGoal}".
 Do NOT return a generic template.
 Do NOT start with "Dear {CustomerName}".
+Do NOT start with "Hello {CustomerName}".
+Do NOT start with "Hi {CustomerName}" unless it is followed immediately by a concrete offer in the same sentence.
 Do NOT say "We are excited" unless the campaign goal truly sounds celebratory.
 Do NOT write in stiff corporate language.
 If the goal mentions a program, organization, or audience like "Applied AI", "MSMEs", "AI adoption", or "MCCIA", include those details naturally.
 The CTA should feel practical, for example: book a free consultation, reply to this message, or schedule a quick call.
+The message must contain at least 3 concrete campaign details from the brief or campaign goal.
+Avoid filler greetings and get to the point quickly.
 
 Return ONLY the WhatsApp message text.`
 }
@@ -222,7 +283,10 @@ const callOpenAI = async (apiKey, prompt) => {
 const generateWhatsAppMessage = async ({ provider, prompt, anchors }) => {
     const firstDraft = normalizeMessage(await provider.fn(provider.key, prompt))
 
-    if (!anchors.length || !isGenericWhatsAppMessage(firstDraft, anchors)) {
+    if (
+        !anchors.length ||
+        (!isGenericWhatsAppMessage(firstDraft, anchors) && firstDraft.length >= 180 && firstDraft.split(/\s+/).length >= 35)
+    ) {
         return firstDraft
     }
 
@@ -234,6 +298,26 @@ const generateWhatsAppMessage = async ({ provider, prompt, anchors }) => {
     })
 
     return normalizeMessage(await provider.fn(provider.key, retryPrompt))
+}
+
+const extractCampaignBrief = async ({ provider, campaignGoal, businessName, industry, city, anchors }) => {
+    const prompt = buildCampaignBriefPrompt({ campaignGoal, businessName, industry, city, anchors })
+    const raw = await provider.fn(provider.key, prompt)
+    const parsed = safeParseJson(raw)
+
+    if (!parsed || typeof parsed !== 'object') {
+        console.error(`[api/generate] ${provider.id} brief parse failed, using fallback brief`)
+        return buildFallbackBrief(campaignGoal, anchors)
+    }
+
+    return {
+        coreOffer: parsed.coreOffer || campaignGoal,
+        targetAudience: parsed.targetAudience || 'prospective customers',
+        mainBenefit: parsed.mainBenefit || 'clear business value',
+        callToAction: parsed.callToAction || 'Reply to this message to book a quick consultation',
+        mustMention: Array.isArray(parsed.mustMention) ? parsed.mustMention.filter(Boolean).slice(0, 6) : anchors.slice(0, 6),
+        objective: parsed.objective || 'Generate a specific WhatsApp message'
+    }
 }
 
 const normalizeProvider = (provider) => {
@@ -367,16 +451,8 @@ export async function POST(request) {
                 return NextResponse.json({ error: 'Campaign goal is required.' }, { status: 400 })
             }
 
-            const prompt = buildWhatsAppPrompt({
-                tone,
-                campaignGoal: campaignGoal.trim(),
-                broadcastMode,
-                businessName: profile?.business_name || null,
-                industry: profile?.industry || null,
-                city: profile?.city || null
-            })
-            const anchors = extractCampaignAnchors(campaignGoal)
-            console.log('[api/generate] whatsapp prompt:', prompt)
+            const trimmedGoal = campaignGoal.trim()
+            const anchors = extractCampaignAnchors(trimmedGoal)
             console.log('[api/generate] whatsapp anchors:', anchors)
 
             const providerOrder = activeProvider === 'openai'
@@ -392,6 +468,27 @@ export async function POST(request) {
             for (const provider of providerOrder) {
                 if (!provider.key) continue
                 try {
+                    const brief = await extractCampaignBrief({
+                        provider,
+                        campaignGoal: trimmedGoal,
+                        businessName: profile?.business_name || null,
+                        industry: profile?.industry || null,
+                        city: profile?.city || null,
+                        anchors
+                    })
+                    console.log(`[api/generate] ${provider.id} extracted brief:`, brief)
+
+                    const prompt = buildWhatsAppPrompt({
+                        tone,
+                        campaignGoal: trimmedGoal,
+                        broadcastMode,
+                        businessName: profile?.business_name || null,
+                        industry: profile?.industry || null,
+                        city: profile?.city || null,
+                        brief
+                    })
+                    console.log('[api/generate] whatsapp prompt:', prompt)
+
                     const message = await generateWhatsAppMessage({ provider, prompt, anchors })
                     return NextResponse.json({ message, provider: provider.id, keySource: source })
                 } catch (providerError) {
