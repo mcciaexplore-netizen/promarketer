@@ -196,7 +196,7 @@ Rewrite it now so that it:
 Return ONLY the improved WhatsApp message text.`
 
 const callGemini = async (apiKey, prompt) => {
-    const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash']
+    const candidateModels = ['gemini-2.5-flash-preview-04-17', 'gemini-2.5-flash', 'gemini-2.0-flash']
     let lastError = null
 
     for (const model of candidateModels) {
@@ -246,6 +246,38 @@ const callGemini = async (apiKey, prompt) => {
     }
 
     throw new Error(lastError || 'Gemini failed for all candidate models')
+}
+
+const callGrok = async (apiKey, prompt) => {
+    const response = await fetch('https://api.x.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+            model: 'grok-4-latest',
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are an expert WhatsApp marketing copywriter for Indian businesses. You write specific, natural, high-conversion WhatsApp messages and avoid generic email-style intros.'
+                },
+                { role: 'user', content: prompt }
+            ],
+            temperature: 0.95,
+            max_tokens: 400
+        })
+    })
+
+    if (!response.ok) {
+        const err = await response.json()
+        throw new Error(`Grok error: ${err.error?.message || response.statusText}`)
+    }
+
+    const data = await response.json()
+    const text = data.choices?.[0]?.message?.content
+    if (!text) throw new Error('Grok returned empty response')
+    return text.trim()
 }
 
 const callOpenAI = async (apiKey, prompt) => {
@@ -322,6 +354,7 @@ const extractCampaignBrief = async ({ provider, campaignGoal, businessName, indu
 
 const normalizeProvider = (provider) => {
     if (provider === 'openai') return 'openai'
+    if (provider === 'grok') return 'grok'
     return 'gemini'
 }
 
@@ -329,7 +362,7 @@ const pickBestBusinessProfile = (profiles = []) => {
     if (!Array.isArray(profiles) || !profiles.length) return null
 
     const withKeys = profiles.find((profile) =>
-        Boolean(profile?.gemini_api_key?.trim() || profile?.openai_api_key?.trim())
+        Boolean(profile?.gemini_api_key?.trim() || profile?.openai_api_key?.trim() || profile?.grok_api_key?.trim())
     )
 
     return withKeys || profiles[0] || null
@@ -355,11 +388,13 @@ const getApiKeys = async () => {
             const profile = await getProfileFromClient(supabase)
             const profileGemini = profile?.gemini_api_key?.trim() || null
             const profileOpenAI = profile?.openai_api_key?.trim() || null
+            const profileGrok = profile?.grok_api_key?.trim() || null
 
-            if (profileGemini || profileOpenAI) {
+            if (profileGemini || profileOpenAI || profileGrok) {
                 return {
                     gemini: profileGemini,
                     openai: profileOpenAI,
+                    grok: profileGrok,
                     activeProvider: normalizeProvider(profile?.active_ai_provider),
                     source: 'business_profile',
                     profile
@@ -374,6 +409,7 @@ const getApiKeys = async () => {
         return {
             gemini: process.env.GEMINI_API_KEY || null,
             openai: process.env.OPENAI_API_KEY || null,
+            grok: null,
             activeProvider: normalizeProvider(process.env.ACTIVE_AI_PROVIDER),
             source: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY ? 'env' : 'none',
             profile: null
@@ -394,6 +430,7 @@ const getApiKeys = async () => {
         return {
             gemini: process.env.GEMINI_API_KEY || null,
             openai: process.env.OPENAI_API_KEY || null,
+            grok: null,
             activeProvider: normalizeProvider(process.env.ACTIVE_AI_PROVIDER),
             source: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY ? 'env' : 'none',
             profile: null
@@ -402,11 +439,13 @@ const getApiKeys = async () => {
 
     const profileGemini = profile?.gemini_api_key?.trim() || null
     const profileOpenAI = profile?.openai_api_key?.trim() || null
+    const profileGrok = profile?.grok_api_key?.trim() || null
 
-    if (profileGemini || profileOpenAI) {
+    if (profileGemini || profileOpenAI || profileGrok) {
         return {
             gemini: profileGemini,
             openai: profileOpenAI,
+            grok: profileGrok,
             activeProvider: normalizeProvider(profile?.active_ai_provider),
             source: 'business_profile',
             profile
@@ -416,6 +455,7 @@ const getApiKeys = async () => {
     return {
         gemini: process.env.GEMINI_API_KEY || null,
         openai: process.env.OPENAI_API_KEY || null,
+        grok: null,
         activeProvider: normalizeProvider(process.env.ACTIVE_AI_PROVIDER),
         source: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY ? 'env' : 'none',
         profile
@@ -443,8 +483,8 @@ export async function POST(request) {
             topic
         })
 
-        const { gemini, openai, activeProvider, source, profile } = await getApiKeys()
-        console.log('[api/generate] key source + provider:', { source, activeProvider, hasGemini: Boolean(gemini), hasOpenAI: Boolean(openai) })
+        const { gemini, openai, grok, activeProvider, source, profile } = await getApiKeys()
+        console.log('[api/generate] key source + provider:', { source, activeProvider, hasGemini: Boolean(gemini), hasOpenAI: Boolean(openai), hasGrok: Boolean(grok) })
 
         if (type === 'whatsapp') {
             if (!campaignGoal.trim()) {
@@ -455,15 +495,13 @@ export async function POST(request) {
             const anchors = extractCampaignAnchors(trimmedGoal)
             console.log('[api/generate] whatsapp anchors:', anchors)
 
-            const providerOrder = activeProvider === 'openai'
-                ? [
-                    { id: 'openai', key: openai, fn: callOpenAI },
-                    { id: 'gemini', key: gemini, fn: callGemini }
-                ]
-                : [
-                    { id: 'gemini', key: gemini, fn: callGemini },
-                    { id: 'openai', key: openai, fn: callOpenAI }
-                ]
+            const allProviders = {
+                gemini: { id: 'gemini', key: gemini, fn: callGemini },
+                openai: { id: 'openai', key: openai, fn: callOpenAI },
+                grok: { id: 'grok', key: grok, fn: callGrok }
+            }
+            const fallbackOrder = ['gemini', 'openai', 'grok'].filter((p) => p !== activeProvider)
+            const providerOrder = [activeProvider, ...fallbackOrder].map((p) => allProviders[p]).filter(Boolean)
 
             for (const provider of providerOrder) {
                 if (!provider.key) continue
