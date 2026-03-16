@@ -59,36 +59,51 @@ Return ONLY the WhatsApp message text.`
 }
 
 const callGemini = async (apiKey, prompt) => {
-    const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-        {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: {
-                    temperature: 0.85,
-                    topK: 40,
-                    topP: 0.95,
-                    maxOutputTokens: 300
-                },
-                safetySettings: [
-                    { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-                    { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
-                ]
-            })
-        }
-    )
+    const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash']
+    let lastError = null
 
-    if (!response.ok) {
-        const err = await response.json()
-        throw new Error(`Gemini error: ${err.error?.message || response.statusText}`)
+    for (const model of candidateModels) {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': apiKey
+                },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.85,
+                        topK: 40,
+                        topP: 0.95,
+                        maxOutputTokens: 300
+                    },
+                    safetySettings: [
+                        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+                        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+                    ]
+                })
+            }
+        )
+
+        if (!response.ok) {
+            const err = await response.json()
+            lastError = `Gemini error (${model}): ${err.error?.message || response.statusText}`
+            continue
+        }
+
+        const data = await response.json()
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+        if (!text) {
+            lastError = `Gemini error (${model}): empty response`
+            continue
+        }
+
+        return text.trim()
     }
 
-    const data = await response.json()
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!text) throw new Error('Gemini returned empty response')
-    return text.trim()
+    throw new Error(lastError || 'Gemini failed for all candidate models')
 }
 
 const callOpenAI = async (apiKey, prompt) => {
