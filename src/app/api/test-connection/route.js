@@ -33,7 +33,7 @@ export async function POST(request) {
             const res = await fetch('https://api.x.ai/v1/chat/completions', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${key.trim()}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: 'grok-beta', messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 })
+                body: JSON.stringify({ model: 'grok-2-latest', messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`);
