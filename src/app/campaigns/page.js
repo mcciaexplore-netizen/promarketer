@@ -17,31 +17,6 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const buildMockCalendar = () => ([
-    {
-        week: 1, days: [
-            { day: 'Mon', platform: 'Instagram', type: 'Reel', content: 'Behind the scenes video showing your team working on recent project.' },
-            { day: 'Tue', platform: 'LinkedIn', type: 'Thought Leadership', content: 'Long-form post about industry trends affecting mid-market.' },
-            { day: 'Wed', platform: 'WhatsApp', type: 'Broadcast', content: 'Send a quick tip + link to our latest comprehensive guide.' },
-            { day: 'Thu', platform: 'Google Ads', type: 'PPC', content: 'Launch search campaign targeting "enterprise CRM tools".' },
-            { day: 'Fri', platform: 'Email', type: 'Newsletter', content: 'Weekly digest with 3 top articles and an exclusive offer.' },
-            { day: 'Sat', platform: null },
-            { day: 'Sun', platform: null }
-        ]
-    },
-    {
-        week: 2, days: [
-            { day: 'Mon', platform: 'Facebook', type: 'Image Post', content: 'Customer testimonial graphic highlighting ROI.' },
-            { day: 'Tue', platform: 'WhatsApp', type: 'Broadcast', content: 'Follow-up message on the guide sent last Wednesday.' },
-            { day: 'Wed', platform: 'LinkedIn', type: 'Poll', content: 'Ask network about their biggest pain point in Q4 planning.' },
-            { day: 'Thu', platform: 'Instagram', type: 'Carousel', content: '5 slides breaking down the answer to the LinkedIn poll.' },
-            { day: 'Fri', platform: 'Email', type: 'Promo', content: 'End of month special offer blast to warm leads.' },
-            { day: 'Sat', platform: 'Instagram', type: 'Story', content: 'Weekend Q&A box for audience engagement.' },
-            { day: 'Sun', platform: null }
-        ]
-    }
-]);
-
 export default function CampaignPlannerPage() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -127,17 +102,35 @@ export default function CampaignPlannerPage() {
         }
     };
 
-    const handleGenerate = (e) => {
+    const handleGenerate = async (e) => {
         e.preventDefault();
         if (platforms.length === 0) return toast.error("Please select at least one platform");
 
         setIsGenerating(true);
-        setTimeout(async () => {
-            const generated = buildMockCalendar();
-            setCalendarData(generated);
+        setCalendarData(null);
+
+        try {
+            const response = await fetch('/api/campaigns/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    form,
+                    platforms
+                })
+            });
+
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Failed to generate campaign');
+            }
+
+            setCalendarData(result.data);
+            toast.success(`Campaign calendar generated with ${result.data.provider}`);
+        } catch (error) {
+            toast.error(error.message);
+        } finally {
             setIsGenerating(false);
-            toast.success("Campaign calendar generated!");
-        }, 1500);
+        }
     };
 
     const getPlatformStyle = (platform) => {
@@ -294,8 +287,8 @@ export default function CampaignPlannerPage() {
                             <div className="w-full h-full animate-in fade-in zoom-in duration-300">
                                 <div className="flex justify-between items-end mb-6 gap-3 flex-wrap">
                                     <div>
-                                        <h2 className="text-xl font-bold tracking-tight text-text-primary">Your Marketing Calendar</h2>
-                                        <p className="text-sm text-text-secondary mt-1">Review your generated strategy below.</p>
+                                        <h2 className="text-xl font-bold tracking-tight text-text-primary">{calendarData.campaignName || 'Your Marketing Calendar'}</h2>
+                                        <p className="text-sm text-text-secondary mt-1">{calendarData.summary || 'Review your generated strategy below.'}</p>
                                     </div>
                                     <div className="flex gap-2 flex-wrap">
                                         <button className="btn-secondary !py-2 !px-3 font-semibold text-sm bg-white" onClick={() => saveCampaign('sheets')} disabled={isSaving || !storageStatus.sheetsConfigured}>
@@ -311,11 +304,16 @@ export default function CampaignPlannerPage() {
                                 </div>
 
                                 <div className="space-y-8">
-                                    {calendarData.map((weekData) => (
+                                    {calendarData.weeks?.map((weekData) => (
                                         <div key={weekData.week} className="w-full">
-                                            <h4 className="font-bold text-lg mb-3 flex items-center gap-2">
-                                                <span className="bg-primary text-white text-xs px-2 py-0.5 rounded uppercase tracking-wide">Week {weekData.week}</span>
-                                            </h4>
+                                            <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
+                                                <h4 className="font-bold text-lg flex items-center gap-2">
+                                                    <span className="bg-primary text-white text-xs px-2 py-0.5 rounded uppercase tracking-wide">Week {weekData.week}</span>
+                                                </h4>
+                                                {weekData.focus && (
+                                                    <p className="text-sm text-text-secondary">{weekData.focus}</p>
+                                                )}
+                                            </div>
 
                                             <div className="grid grid-cols-7 gap-3">
                                                 <div className="col-span-1 text-center font-semibold text-xs text-text-secondary uppercase">Mon</div>
