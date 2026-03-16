@@ -3,20 +3,17 @@ import { useState, useEffect, useRef } from 'react';
 import {
     Building,
     Key,
-    Users,
     Link as LinkIcon,
     Upload,
     CheckCircle2,
-    Plus,
     RefreshCw,
-    MoreVertical,
     CalendarRange,
     Loader2,
     Database,
-    Table2
+    Table2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getGoogleCalendarStatus, getTeamMembers, getBusinessProfile, updateBusinessProfile } from '../../lib/db';
+import { getGoogleCalendarStatus, getBusinessProfile, updateBusinessProfile } from '../../lib/db';
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState('profile');
@@ -26,8 +23,6 @@ export default function SettingsPage() {
     const [logoUploading, setLogoUploading] = useState(false);
     const profileFormRef = useRef(null);
     const fileInputRef = useRef(null);
-    const [team, setTeam] = useState([]);
-    const [teamLoading, setTeamLoading] = useState(false);
     const [apiKeys, setApiKeys] = useState({ gemini: '', openai: '', grok: '' });
     const [apiStatuses, setApiStatuses] = useState({ gemini: 'idle', openai: 'idle', grok: 'idle' }); // idle | testing | success | error
     const [apiMessages, setApiMessages] = useState({ gemini: '', openai: '', grok: '' });
@@ -39,7 +34,6 @@ export default function SettingsPage() {
     const [isSyncingAll, setIsSyncingAll] = useState(false);
     const [isDisconnecting, setIsDisconnecting] = useState(false);
     const [isSavingAutoSync, setIsSavingAutoSync] = useState(false);
-    const [isSavingStorageProvider, setIsSavingStorageProvider] = useState(false);
 
     useEffect(() => {
         Promise.all([
@@ -61,16 +55,6 @@ export default function SettingsPage() {
             if (storageResult.success) setStorageStatus(storageResult.data);
         });
     }, []);
-
-    useEffect(() => {
-        if (activeTab === 'team') {
-            setTeamLoading(true);
-            getTeamMembers().then(data => {
-                setTeam(data || []);
-                setTeamLoading(false);
-            });
-        }
-    }, [activeTab]);
 
     const handleTestKey = async (provider) => {
         const key = apiKeys[provider];
@@ -127,10 +111,6 @@ export default function SettingsPage() {
         } finally {
             setSwitchingProvider(false);
         }
-    };
-
-    const handleInvite = () => {
-        toast.success("Share the app URL with your team — they can sign up and will appear here automatically.");
     };
 
     const handleProfileSave = async (e) => {
@@ -263,7 +243,6 @@ export default function SettingsPage() {
     const TABS = [
         { id: 'profile', label: 'Business Profile', icon: Building },
         { id: 'apikeys', label: 'API Keys', icon: Key },
-        { id: 'team', label: 'Team Members', icon: Users },
         { id: 'integrations', label: 'Integrations', icon: LinkIcon }
     ];
 
@@ -486,77 +465,6 @@ export default function SettingsPage() {
                         </div>
                     )}
 
-                    {/* TEAM MEMBERS TAB */}
-                    {activeTab === 'team' && (
-                        <div className="animate-in fade-in duration-300 h-full flex flex-col">
-                            <div className="p-5 border-b border-[#E5E5E5] bg-gray-50/50 flex justify-between items-center">
-                                <div>
-                                    <h3 className="font-bold text-lg">Team Members</h3>
-                                    <p className="text-sm text-text-secondary mt-1">Everyone who has signed up to this workspace.</p>
-                                </div>
-                                <button className="btn-primary !py-1.5 !px-3 font-semibold text-sm" onClick={handleInvite}>
-                                    <Plus className="w-4 h-4 mr-1" /> Invite Member
-                                </button>
-                            </div>
-
-                            {teamLoading ? (
-                                <div className="flex items-center justify-center p-12">
-                                    <div className="w-6 h-6 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                                </div>
-                            ) : (
-                                <div className="overflow-x-auto flex-1">
-                                    <table className="min-w-full divide-y divide-[#E5E5E5]">
-                                        <thead className="bg-white">
-                                            <tr>
-                                                <th className="px-6 py-4 text-left text-[11px] font-bold text-text-secondary uppercase tracking-wider bg-gray-50">User</th>
-                                                <th className="px-6 py-4 text-left text-[11px] font-bold text-text-secondary uppercase tracking-wider bg-gray-50">Role</th>
-                                                <th className="px-6 py-4 text-left text-[11px] font-bold text-text-secondary uppercase tracking-wider bg-gray-50">Joined</th>
-                                                <th className="px-6 py-4 bg-gray-50"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-100 bg-white">
-                                            {team.length === 0 && (
-                                                <tr>
-                                                    <td colSpan={4} className="px-6 py-8 text-center text-sm text-text-secondary">
-                                                        No team members yet. Share the app URL to invite people.
-                                                    </td>
-                                                </tr>
-                                            )}
-                                            {team.map(member => (
-                                                <tr key={member.id} className="hover:bg-gray-50/50 transition-colors">
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <div className="flex items-center">
-                                                            <div className="flex-shrink-0 h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs ring-1 ring-primary/20">
-                                                                {(member.full_name || member.email || '?').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                                                            </div>
-                                                            <div className="ml-4">
-                                                                <div className="text-sm font-semibold text-text-primary">{member.full_name || '—'}</div>
-                                                                <div className="text-[13px] text-text-secondary mt-0.5">{member.email}</div>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <span className={`badge ${member.role === 'owner' || member.role === 'admin' ? 'badge-primary' : 'bg-gray-100 text-gray-700'}`}>
-                                                            {member.role || 'member'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">
-                                                        {member.created_at ? new Date(member.created_at).toLocaleDateString() : '—'}
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                                                        <button className="text-gray-400 hover:text-text-primary">
-                                                            <MoreVertical className="w-5 h-5" />
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
                     {/* INTEGRATIONS TAB */}
                     {activeTab === 'integrations' && (
                         <div className="animate-in fade-in duration-300">
@@ -641,49 +549,6 @@ export default function SettingsPage() {
                                         </span>
                                     </div>
 
-                                    <div className="flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4 rounded-xl border border-slate-200 p-4">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 bg-white rounded-lg shadow-sm border border-gray-200 flex items-center justify-center shrink-0">
-                                                <Table2 className="w-6 h-6 text-green-600" />
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-text-primary">Google Sheets</h4>
-                                                <p className="text-sm text-text-secondary mt-1">
-                                                    {storageStatus.sheetsConfigured
-                                                        ? 'Connected via service account. Campaign saves can be mirrored into the Campaigns sheet.'
-                                                        : 'Not configured yet. Add GOOGLE_SHEETS_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL, and GOOGLE_PRIVATE_KEY on the server.'}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <span className={`btn-secondary !py-2 bg-white border-gray-300 ${!storageStatus.sheetsConfigured ? 'opacity-60' : ''}`}>
-                                            <CheckCircle2 className={`w-4 h-4 ${storageStatus.sheetsConfigured ? 'text-green-600' : 'text-gray-400'}`} />
-                                            {storageStatus.sheetsConfigured ? 'Connected' : 'Not Configured'}
-                                        </span>
-                                    </div>
-
-                                    <div className="rounded-xl border border-slate-200 p-4">
-                                        <div className="mb-3">
-                                            <p className="font-semibold text-text-primary">Default campaign save destination</p>
-                                            <p className="text-sm text-text-secondary mt-1">Choose where newly saved campaigns should go.</p>
-                                        </div>
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                            {[
-                                                { id: 'supabase', label: 'Supabase' },
-                                                { id: 'sheets', label: 'Google Sheets' },
-                                                { id: 'both', label: 'Both' }
-                                            ].map((option) => (
-                                                <button
-                                                    key={option.id}
-                                                    type="button"
-                                                    onClick={() => handleStorageProviderChange(option.id)}
-                                                    disabled={isSavingStorageProvider || ((option.id === 'sheets' || option.id === 'both') && !storageStatus.sheetsConfigured)}
-                                                    className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${storageStatus.campaignStorageProvider === option.id ? 'border-primary bg-primary/5 text-primary' : 'border-slate-200 text-slate-600 hover:border-slate-300'} disabled:opacity-50`}
-                                                >
-                                                    {option.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
                                 </div>
 
                                 {/* WhatsApp */}

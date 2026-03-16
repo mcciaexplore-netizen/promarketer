@@ -27,21 +27,53 @@ export default function WhatsAppCrafterPage() {
     const [isBroadcastList, setIsBroadcastList] = useState(false);
     const [namesList, setNamesList] = useState('');
 
-    const handleGenerate = (e) => {
+    const copyText = async (text) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            toast.success('Copied to clipboard');
+        } catch {
+            toast.error('Failed to copy message');
+        }
+    };
+
+    const handleGenerate = async (e) => {
         e.preventDefault();
-        if (!goal) return toast.error("Please enter a campaign goal");
+        if (!goal.trim()) return toast.error("Please enter a campaign goal");
         setIsGenerating(true);
+        setGeneratedMsg('');
 
-        setTimeout(() => {
-            let baseMsg = `Hi {CustomerName} 👋\n\nI noticed you were looking for help with {ProductName}. We are currently offering a {OfferAmount} discount for early adopters.\n\nLet me know if you want to jump on a quick call!\n\nBest,\nYour Team`;
+        try {
+            const payload = {
+                type: 'whatsapp',
+                tone,
+                campaignGoal: goal.trim(),
+                broadcastMode: isBroadcastList,
+                customerName: '{CustomerName}'
+            };
 
-            if (tone === 'Urgent') baseMsg = `⚠️ {CustomerName}, final reminder! Your {OfferAmount} discount on {ProductName} expires in 2 hours. Click here to claim it before it's gone!`;
-            if (tone === 'Professional') baseMsg = `Dear {CustomerName},\n\nWe wanted to officially introduce you to {ProductName}. Our clients have reported significant ROI improvements.\n\nWe are currently offering {OfferAmount} off. Let us know if you'd like to schedule a demo.`;
+            console.log('Sending to AI:', payload);
 
-            setGeneratedMsg(baseMsg);
-            setIsGenerating(false);
+            const response = await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                toast.error(data.error || 'Failed to generate message');
+                return;
+            }
+
+            console.log('AI Response:', data.message);
+            setGeneratedMsg(data.message);
             toast.success("WhatsApp message crafted!");
-        }, 1500);
+        } catch (error) {
+            console.error('Generation error:', error);
+            toast.error('Something went wrong. Check your API key in Settings.');
+        } finally {
+            setIsGenerating(false);
+        }
     };
 
     const calculateReadTime = (text) => {
@@ -191,7 +223,7 @@ export default function WhatsAppCrafterPage() {
                                 </div>
                             )}
 
-                            {generatedMsg && !isBroadcastList && (
+                            {generatedMsg && !isGenerating && !isBroadcastList && (
                                 <div className="bg-[#DCF8C6] self-end p-3 sm:p-4 rounded-xl rounded-tr-none shadow-sm text-[15px] sm:text-[16px] text-gray-800 mb-4 max-w-md relative whitespace-pre-wrap leading-relaxed border border-green-200">
                                     {renderHighlightedMessage(generatedMsg)}
                                     <div className="flex justify-end items-center gap-1 mt-1">
@@ -201,7 +233,7 @@ export default function WhatsAppCrafterPage() {
                                 </div>
                             )}
 
-                            {generatedMsg && isBroadcastList && namesList.split(',').filter(x => x.trim()).slice(0, 3).map((name, idx) => (
+                            {generatedMsg && !isGenerating && isBroadcastList && namesList.split(',').filter(x => x.trim()).slice(0, 3).map((name, idx) => (
                                 <div key={idx} className="bg-[#DCF8C6] self-end p-3 sm:p-4 rounded-xl rounded-tr-none shadow-sm text-[15px] sm:text-[16px] text-gray-800 mb-4 max-w-md relative whitespace-pre-wrap leading-relaxed border border-green-200 animate-in slide-in-from-bottom-2 fade-in">
                                     {renderHighlightedMessage(generatedMsg.replace('{CustomerName}', name.trim()))}
                                     <div className="flex justify-end items-center gap-1 mt-1">
