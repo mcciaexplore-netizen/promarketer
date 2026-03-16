@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getSupabaseRoute } from '@/lib/supabaseRoute'
 
 const sampleByPlatform = {
     Instagram: 'A behind-the-scenes moment that makes your brand feel human and worth following.',
@@ -358,107 +357,36 @@ const normalizeProvider = (provider) => {
     return 'gemini'
 }
 
-const pickBestBusinessProfile = (profiles = []) => {
-    if (!Array.isArray(profiles) || !profiles.length) return null
-
-    const withKeys = profiles.find((profile) =>
-        Boolean(profile?.gemini_api_key?.trim() || profile?.openai_api_key?.trim() || profile?.grok_api_key?.trim())
-    )
-
-    return withKeys || profiles[0] || null
-}
-
-const getProfileFromClient = async (supabase) => {
-    const { data: profiles, error } = await supabase
-        .from('business_profile')
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .limit(20)
-
-    if (error) throw error
-    return pickBestBusinessProfile(profiles)
-}
-
 const getApiKeys = async () => {
-    try {
-        const supabase = getSupabaseRoute()
-        const { data: { user } } = await supabase.auth.getUser()
-
-        if (user) {
-            const profile = await getProfileFromClient(supabase)
-            const profileGemini = profile?.gemini_api_key?.trim() || null
-            const profileOpenAI = profile?.openai_api_key?.trim() || null
-            const profileGrok = profile?.grok_api_key?.trim() || null
-
-            if (profileGemini || profileOpenAI || profileGrok) {
-                return {
-                    gemini: profileGemini,
-                    openai: profileOpenAI,
-                    grok: profileGrok,
-                    activeProvider: normalizeProvider(profile?.active_ai_provider),
-                    source: 'business_profile',
-                    profile
-                }
-            }
-        }
-    } catch (error) {
-        console.error('[api/generate] route client profile lookup failed:', error.message)
-    }
-
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        return {
-            gemini: process.env.GEMINI_API_KEY || null,
-            openai: process.env.OPENAI_API_KEY || null,
-            grok: null,
-            activeProvider: normalizeProvider(process.env.ACTIVE_AI_PROVIDER),
-            source: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY ? 'env' : 'none',
-            profile: null
-        }
-    }
-
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL,
         process.env.SUPABASE_SERVICE_ROLE_KEY
     )
 
-    let profile = null
+    const { data: profile, error } = await supabase
+        .from('business_profile')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
 
-    try {
-        profile = await getProfileFromClient(supabase)
-    } catch (error) {
-        console.error('[api/generate] failed to load business_profile keys:', error.message)
-        return {
-            gemini: process.env.GEMINI_API_KEY || null,
-            openai: process.env.OPENAI_API_KEY || null,
-            grok: null,
-            activeProvider: normalizeProvider(process.env.ACTIVE_AI_PROVIDER),
-            source: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY ? 'env' : 'none',
-            profile: null
-        }
+    if (error) {
+        console.error('[api/generate] failed to load business_profile:', error.message)
     }
 
-    const profileGemini = profile?.gemini_api_key?.trim() || null
-    const profileOpenAI = profile?.openai_api_key?.trim() || null
-    const profileGrok = profile?.grok_api_key?.trim() || null
+    console.log('[api/generate] profile row id:', profile?.id || null, 'active_ai_provider:', profile?.active_ai_provider)
 
-    if (profileGemini || profileOpenAI || profileGrok) {
-        return {
-            gemini: profileGemini,
-            openai: profileOpenAI,
-            grok: profileGrok,
-            activeProvider: normalizeProvider(profile?.active_ai_provider),
-            source: 'business_profile',
-            profile
-        }
-    }
+    const gemini = profile?.gemini_api_key?.trim() || null
+    const openai = profile?.openai_api_key?.trim() || null
+    const grok = profile?.grok_api_key?.trim() || null
 
     return {
-        gemini: process.env.GEMINI_API_KEY || null,
-        openai: process.env.OPENAI_API_KEY || null,
-        grok: null,
-        activeProvider: normalizeProvider(process.env.ACTIVE_AI_PROVIDER),
-        source: process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY ? 'env' : 'none',
-        profile
+        gemini,
+        openai,
+        grok,
+        activeProvider: normalizeProvider(profile?.active_ai_provider),
+        source: (gemini || openai || grok) ? 'business_profile' : 'none',
+        profile: profile || null
     }
 }
 
