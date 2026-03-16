@@ -462,8 +462,10 @@ export async function POST(request) {
                 }
             }
 
+            const diagMsg = `No API key found. Profile row: ${profile?.id ? 'exists' : 'MISSING'}. Keys in DB — Gemini: ${Boolean(gemini)}, OpenAI: ${Boolean(openai)}, Grok: ${Boolean(grok)}. Active provider: ${activeProvider}. Go to Settings → API Keys and save your key.`
+            console.error('[api/generate] ' + diagMsg)
             return NextResponse.json(
-                { error: 'No API key configured. Please add Gemini or OpenAI key in Settings.' },
+                { error: diagMsg },
                 { status: 400 }
             )
         }
