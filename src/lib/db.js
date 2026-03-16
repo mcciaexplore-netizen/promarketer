@@ -157,11 +157,22 @@ export const getBusinessProfile = async () => {
 }
 
 export const updateBusinessProfile = async (updates) => {
-    const { data } = await supabase
-        .from('business_profile').update(updates)
-        .eq('id', (await getBusinessProfile()).id)
-        .select().single()
-    return data
+    const profile = await getBusinessProfile()
+    console.log('[updateBusinessProfile] existing profile:', profile?.id, 'updates:', Object.keys(updates))
+    if (profile?.id) {
+        const { data, error } = await supabase
+            .from('business_profile').update(updates)
+            .eq('id', profile.id)
+            .select().single()
+        if (error) throw error
+        return data
+    } else {
+        const { data, error } = await supabase
+            .from('business_profile').insert(updates)
+            .select().single()
+        if (error) throw error
+        return data
+    }
 }
 
 // ── SCHEDULER ────────────────────────────────

@@ -22,7 +22,10 @@ export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState('profile');
     const [profile, setProfile] = useState(null);
     const [savingProfile, setSavingProfile] = useState(false);
+    const [logoUrl, setLogoUrl] = useState(null);
+    const [logoUploading, setLogoUploading] = useState(false);
     const profileFormRef = useRef(null);
+    const fileInputRef = useRef(null);
     const [team, setTeam] = useState([]);
     const [teamLoading, setTeamLoading] = useState(false);
     const [isTestingGemini, setIsTestingGemini] = useState(false);
@@ -41,6 +44,7 @@ export default function SettingsPage() {
             fetch('/api/settings/storage-status').then((res) => res.json()).catch(() => ({ success: false }))
         ]).then(([profileData, googleStatus, storageResult]) => {
             setProfile(profileData);
+            if (profileData?.logo_url) setLogoUrl(profileData.logo_url);
             setGoogleCalendar(googleStatus);
             if (storageResult.success) setStorageStatus(storageResult.data);
         });
@@ -82,13 +86,43 @@ export default function SettingsPage() {
             gst_number: form.gst_number.value,
             primary_color: form.primary_color.value,
         };
+        if (logoUrl) updates.logo_url = logoUrl;
+        console.log('[handleProfileSave] updates:', updates);
         try {
-            await updateBusinessProfile(updates);
+            const saved = await updateBusinessProfile(updates);
+            setProfile(saved);
             toast.success('Business profile saved!');
-        } catch {
-            toast.error('Failed to save profile');
+        } catch (err) {
+            console.error('[handleProfileSave] error:', err);
+            toast.error('Failed to save profile: ' + (err?.message || 'unknown error'));
         } finally {
             setSavingProfile(false);
+        }
+    };
+
+    const handleLogoUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) { toast.error('Please select an image file'); return; }
+        setLogoUploading(true);
+        console.log('[handleLogoUpload] uploading:', file.name, file.type);
+        try {
+            const { supabase: sb } = await import('../../lib/supabaseClient');
+            const { data: { user } } = await sb.auth.getUser();
+            const ext = file.name.split('.').pop();
+            const path = `${user.id}/logo.${ext}`;
+            const { error: uploadError } = await sb.storage.from('business-logos').upload(path, file, { upsert: true });
+            if (uploadError) throw uploadError;
+            const { data: { publicUrl } } = sb.storage.from('business-logos').getPublicUrl(path);
+            console.log('[handleLogoUpload] public URL:', publicUrl);
+            setLogoUrl(publicUrl);
+            toast.success('Logo uploaded — click Save Profile to apply.');
+        } catch (err) {
+            console.error('[handleLogoUpload] error:', err);
+            toast.error('Logo upload failed: ' + (err?.message || 'unknown error'));
+        } finally {
+            setLogoUploading(false);
+            e.target.value = '';
         }
     };
 
@@ -219,18 +253,30 @@ export default function SettingsPage() {
                                 <h3 className="font-bold text-lg">Business Profile</h3>
                                 <p className="text-sm text-text-secondary mt-1">This information is used across all generated campaigns and PDF reports.</p>
                             </div>
-                            <form ref={profileFormRef} className="p-5 sm:p-6" onSubmit={handleProfileSave}>
+                            <form ref={profileFormRef} key={profile?.id || 'new'} className="p-5 sm:p-6" onSubmit={handleProfileSave}>
+                                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
                                 <div className="flex items-center gap-6 mb-8 border-b border-gray-100 pb-8">
-                                    <div className="w-24 h-24 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center relative overflow-hidden group hover:border-primary transition-colors cursor-pointer">
+                                    <div
+                                        className="w-24 h-24 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center relative overflow-hidden group hover:border-primary transition-colors cursor-pointer"
+                                        onClick={() => fileInputRef.current?.click()}
+                                    >
+                                        {logoUrl
+                                            ? <img src={logoUrl} alt="Company logo" className="w-full h-full object-cover" />
+                                            : <Building className="w-8 h-8 text-gray-400" />
+                                        }
                                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Upload className="w-6 h-6 text-white" />
+                                            {logoUploading
+                                                ? <Loader2 className="w-6 h-6 text-white animate-spin" />
+                                                : <Upload className="w-6 h-6 text-white" />
+                                            }
                                         </div>
-                                        <Building className="w-8 h-8 text-gray-400" />
                                     </div>
                                     <div>
                                         <h4 className="font-semibold text-sm text-text-primary mb-1">Company Logo</h4>
                                         <p className="text-xs text-text-secondary max-w-sm mb-3 shadow-none leading-relaxed">Recommended 512x512px. Used on exported reports and email footers.</p>
-                                        <button type="button" className="btn-secondary !py-1 !px-3 text-xs bg-white">Upload new image</button>
+                                        <button type="button" className="btn-secondary !py-1 !px-3 text-xs bg-white" onClick={() => fileInputRef.current?.click()} disabled={logoUploading}>
+                                            {logoUploading ? 'Uploading...' : 'Upload new image'}
+                                        </button>
                                     </div>
                                 </div>
 
