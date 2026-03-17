@@ -21,6 +21,8 @@ export default function ContentStudioPage() {
     const [captionData, setCaptionData] = useState({ platform: 'Instagram', tone: 'Professional', variations: 3, prompt: '' });
     const [adData, setAdData] = useState({ product: '', usp: '', audience: '', platform: 'Meta Ads' });
     const [blogData, setBlogData] = useState({ topic: '', keyword: '', level: 'Intermediate' });
+    const [hashtagData, setHashtagData] = useState({ platform: 'Instagram', prompt: '', count: 15 });
+    const [ideaData, setIdeaData] = useState({ platform: 'Instagram', topic: '', audience: '', count: 5 });
 
     const getPlatformLimit = (platform) => {
         switch (platform) {
@@ -31,71 +33,156 @@ export default function ContentStudioPage() {
         }
     }
 
-    const handleGenerateCaptions = (e) => {
+    const handleGenerateCaptions = async (e) => {
         e.preventDefault();
+        if (!captionData.prompt.trim()) return toast.error('Please enter a topic / prompt');
         setIsGenerating(true);
         setGeneratedOutput(null);
-        setTimeout(() => {
-            setGeneratedOutput({
-                type: 'captions',
-                data: Array.from({ length: captionData.variations }).map((_, i) => (
-                    `🚀 Variation ${i + 1}:\nHere's an amazing post generated specifically for ${captionData.platform} with a ${captionData.tone} tone. Keep your audience engaged with dynamic content that converts!\n\n#marketing #AI #automation`
-                ))
-            });
+        try {
+            const response = await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'content_captions',
+                    platform: captionData.platform,
+                    tone: captionData.tone,
+                    topic: captionData.prompt.trim(),
+                    variations: captionData.variations
+                })
+            })
+            const result = await response.json()
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Failed to generate captions')
+            }
+            setGeneratedOutput({ type: 'captions', data: result.data, provider: result.provider })
+            toast.success('Captions generated!')
+        } catch (error) {
+            toast.error(error.message)
+        } finally {
             setIsGenerating(false);
-            toast.success('Captions generated!');
-        }, 1500);
+        }
     };
 
-    const handleGenerateAd = (e) => {
+    const handleGenerateAd = async (e) => {
         e.preventDefault();
+        if (!adData.product.trim() || !adData.usp.trim() || !adData.audience.trim()) {
+            return toast.error('Please fill in product, USP, and audience')
+        }
         setIsGenerating(true);
         setGeneratedOutput(null);
-        setTimeout(() => {
-            setGeneratedOutput({
-                type: 'ad',
-                data: {
-                    headline: `Boost Your ROI with ${adData.product || 'AI Tools'}`,
-                    primaryText: `Stop wasting hours on manual tasks. Our ${adData.usp || 'automation suite'} helps ${adData.audience || 'startups'} scale faster than ever before. Try it today for free!`,
-                    description: `Get 50% off your first month.`
-                }
-            });
+        try {
+            const response = await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'content_adcopy',
+                    platform: adData.platform,
+                    product: adData.product.trim(),
+                    usp: adData.usp.trim(),
+                    audience: adData.audience.trim()
+                })
+            })
+            const result = await response.json()
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Failed to generate ad copy')
+            }
+            setGeneratedOutput({ type: 'ad', data: result.data, provider: result.provider })
+            toast.success('Ad copy generated!')
+        } catch (error) {
+            toast.error(error.message)
+        } finally {
             setIsGenerating(false);
-            toast.success('Ad copy generated!');
-        }, 1500);
+        }
     };
 
-    const handleGenerateBlog = (e) => {
+    const handleGenerateBlog = async (e) => {
         e.preventDefault();
+        if (!blogData.topic.trim() || !blogData.keyword.trim()) {
+            return toast.error('Please enter a topic and target keyword')
+        }
         setIsGenerating(true);
         setGeneratedOutput(null);
-        setTimeout(() => {
-            setGeneratedOutput({
-                type: 'blog',
-                data: `
-# H1: The Ultimate Guide to ${blogData.topic || 'AI Marketing'}
-Targeting keyword: "${blogData.keyword || 'ai automation'}" | Level: ${blogData.level}
-
-## H2: Understanding the Fundamentals
-- Introduce core concepts
-- Provide relatable industry examples
-
-## H2: Key Benefits for Your Business
-- Time savings and efficiency bounds
-- Measurable ROI tracking
-
-### H3: Real-world Case Studies
-- Highlight startup success story
-- Show how the target keyword fits into modern strategy
-
-## H2: Getting Started Today
-- Step-by-step actionable guide
-- Conclusion and call to action
-        `
-            });
+        try {
+            const response = await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'content_blog',
+                    blogTopic: blogData.topic.trim(),
+                    keyword: blogData.keyword.trim(),
+                    level: blogData.level
+                })
+            })
+            const result = await response.json()
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Failed to generate blog outline')
+            }
+            setGeneratedOutput({ type: 'blog', data: result.data, provider: result.provider })
+            toast.success('Blog outline generated!')
+        } catch (error) {
+            toast.error(error.message)
+        } finally {
             setIsGenerating(false);
-            toast.success('Blog outline generated!');
-        }, 1500);
+        }
+    };
+
+    const handleGenerateHashtags = async (e) => {
+        e.preventDefault();
+        if (!hashtagData.prompt.trim()) return toast.error('Please enter a topic / prompt')
+        setIsGenerating(true);
+        setGeneratedOutput(null);
+        try {
+            const response = await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'content_hashtags',
+                    platform: hashtagData.platform,
+                    topic: hashtagData.prompt.trim(),
+                    count: hashtagData.count
+                })
+            })
+            const result = await response.json()
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Failed to generate hashtags')
+            }
+            setGeneratedOutput({ type: 'hashtags', data: result.data, provider: result.provider })
+            toast.success('Hashtags generated!')
+        } catch (error) {
+            toast.error(error.message)
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    const handleGenerateIdeas = async (e) => {
+        e.preventDefault();
+        if (!ideaData.topic.trim()) return toast.error('Please enter a topic')
+        setIsGenerating(true);
+        setGeneratedOutput(null);
+        try {
+            const response = await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'content_ideas',
+                    platform: ideaData.platform,
+                    topic: ideaData.topic.trim(),
+                    audience: ideaData.audience.trim(),
+                    count: ideaData.count
+                })
+            })
+            const result = await response.json()
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Failed to generate post ideas')
+            }
+            setGeneratedOutput({ type: 'ideas', data: result.data, provider: result.provider })
+            toast.success('Post ideas generated!')
+        } catch (error) {
+            toast.error(error.message)
+        } finally {
+            setIsGenerating(false);
+        }
     };
 
     const copyToClipboard = (text) => {
@@ -203,7 +290,7 @@ Targeting keyword: "${blogData.keyword || 'ai automation'}" | Level: ${blogData.
 
                                 <div>
                                     <label className="label-text">Topic / Prompt</label>
-                                    <textarea rows={4} className="input-field resize-none text-sm" placeholder="What should the post be about?" required />
+                                    <textarea rows={4} className="input-field resize-none text-sm" placeholder="What should the post be about?" required value={captionData.prompt} onChange={e => setCaptionData({ ...captionData, prompt: e.target.value })} />
                                 </div>
 
                                 <button type="submit" className="btn-primary w-full shadow-sm mt-4" disabled={isGenerating}>
@@ -271,10 +358,66 @@ Targeting keyword: "${blogData.keyword || 'ai automation'}" | Level: ${blogData.
                             </form>
                         )}
 
-                        {(activeTab === 'hashtags' || activeTab === 'ideas') && (
-                            <div className="flex flex-col items-center justify-center p-8 text-center bg-gray-50 border border-dashed rounded-lg">
-                                <p className="text-gray-500 font-medium">Coming soon in phase 2 updates!</p>
-                            </div>
+                        {activeTab === 'hashtags' && (
+                            <form className="space-y-5" onSubmit={handleGenerateHashtags}>
+                                <div>
+                                    <label className="label-text">Platform</label>
+                                    <select className="input-field" value={hashtagData.platform} onChange={e => setHashtagData({ ...hashtagData, platform: e.target.value })}>
+                                        <option>Instagram</option>
+                                        <option>LinkedIn</option>
+                                        <option>Twitter</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="label-text">Topic / Prompt</label>
+                                    <textarea rows={4} className="input-field resize-none text-sm" placeholder="What are the hashtags for?" required value={hashtagData.prompt} onChange={e => setHashtagData({ ...hashtagData, prompt: e.target.value })} />
+                                </div>
+                                <div>
+                                    <label className="label-text flex justify-between">
+                                        <span>Hashtag count</span>
+                                        <span className="text-text-primary">{hashtagData.count}</span>
+                                    </label>
+                                    <input type="range" min="5" max="25" className="w-full mt-2 accent-primary"
+                                        value={hashtagData.count}
+                                        onChange={e => setHashtagData({ ...hashtagData, count: parseInt(e.target.value) })} />
+                                </div>
+                                <button type="submit" className="btn-primary w-full shadow-sm mt-4" disabled={isGenerating}>
+                                    {isGenerating ? "Generating..." : "Generate Hashtags"}
+                                </button>
+                            </form>
+                        )}
+
+                        {activeTab === 'ideas' && (
+                            <form className="space-y-5" onSubmit={handleGenerateIdeas}>
+                                <div>
+                                    <label className="label-text">Platform</label>
+                                    <select className="input-field" value={ideaData.platform} onChange={e => setIdeaData({ ...ideaData, platform: e.target.value })}>
+                                        <option>Instagram</option>
+                                        <option>LinkedIn</option>
+                                        <option>Twitter</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="label-text">Topic</label>
+                                    <input type="text" className="input-field text-sm" required value={ideaData.topic} onChange={e => setIdeaData({ ...ideaData, topic: e.target.value })} />
+                                </div>
+                                <div>
+                                    <label className="label-text">Target Audience</label>
+                                    <input type="text" className="input-field text-sm" placeholder="e.g. Founders of local retail brands" value={ideaData.audience} onChange={e => setIdeaData({ ...ideaData, audience: e.target.value })} />
+                                </div>
+                                <div>
+                                    <label className="label-text flex justify-between">
+                                        <span>Idea count</span>
+                                        <span className="text-text-primary">{ideaData.count}</span>
+                                    </label>
+                                    <input type="range" min="3" max="10" className="w-full mt-2 accent-primary"
+                                        value={ideaData.count}
+                                        onChange={e => setIdeaData({ ...ideaData, count: parseInt(e.target.value) })} />
+                                </div>
+                                <button type="submit" className="btn-primary w-full shadow-sm mt-4" disabled={isGenerating}>
+                                    {isGenerating ? "Generating..." : "Generate Ideas"}
+                                </button>
+                            </form>
                         )}
                     </div>
                 </div>
@@ -313,6 +456,36 @@ Targeting keyword: "${blogData.keyword || 'ai automation'}" | Level: ${blogData.
                                                 <Copy className="w-3.5 h-3.5" /> Copy Let AI write
                                             </button>
                                         </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {generatedOutput?.type === 'hashtags' && (
+                            <div className="w-full h-full animate-in fade-in flex flex-col gap-4">
+                                <div className="flex justify-between items-center border-b border-[#E5E5E5] pb-2 mb-2">
+                                    <h3 className="font-bold text-xl">Generated Hashtags</h3>
+                                    <button className="btn-secondary !py-1 !px-2 text-xs" onClick={() => copyToClipboard(generatedOutput.data.join(' '))}>
+                                        <Copy className="w-3.5 h-3.5 mr-1" /> Copy All
+                                    </button>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {generatedOutput.data.map((tag, idx) => (
+                                        <span key={idx} className="rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary">
+                                            {tag}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {generatedOutput?.type === 'ideas' && (
+                            <div className="w-full h-full animate-in fade-in flex flex-col gap-4">
+                                <h3 className="font-bold text-xl border-b border-[#E5E5E5] pb-2 mb-2">Generated Post Ideas</h3>
+                                {generatedOutput.data.map((idea, idx) => (
+                                    <div key={idx} className="bg-gray-50 border border-[#E5E5E5] rounded-xl p-4 flex flex-col gap-2 hover:border-primary/50 transition-colors">
+                                        <p className="font-semibold text-text-primary">{idea.title}</p>
+                                        <p className="text-sm text-text-secondary leading-relaxed">{idea.hook}</p>
                                     </div>
                                 ))}
                             </div>

@@ -1,14 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const sampleByPlatform = {
-    Instagram: 'A behind-the-scenes moment that makes your brand feel human and worth following.',
-    LinkedIn: 'A credibility-building post that shares a practical lesson your team learned this week.',
-    Facebook: 'A community-first update with a clear story and a friendly call to comment.',
-    Twitter: 'A sharp one-liner with a useful takeaway and a conversation-starting question.',
-    WhatsApp: 'A concise update with a strong hook, key detail, and a direct CTA.'
-}
-
 const STOP_WORDS = new Set([
     'a', 'an', 'and', 'are', 'as', 'at', 'be', 'for', 'from', 'have', 'helping', 'in', 'into', 'is', 'it',
     'its', 'of', 'on', 'or', 'our', 'that', 'the', 'their', 'them', 'there', 'they', 'this', 'to', 'we',
@@ -46,6 +38,23 @@ const buildFallbackBrief = (campaignGoal, anchors) => ({
     mustMention: anchors.slice(0, 5),
     objective: 'Generate a WhatsApp message grounded in the exact campaign goal'
 })
+
+const parseJsonLoose = (value) => {
+    if (!value) return null
+    const direct = safeParseJson(value)
+    if (direct) return direct
+
+    const fencedMatch = value.match(/```json\s*([\s\S]*?)```/i)
+    if (fencedMatch?.[1]) return safeParseJson(fencedMatch[1].trim())
+
+    const firstBrace = value.indexOf('{')
+    const lastBrace = value.lastIndexOf('}')
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+        return safeParseJson(value.slice(firstBrace, lastBrace + 1))
+    }
+
+    return null
+}
 
 const isGenericWhatsAppMessage = (message, anchors) => {
     const normalized = message.toLowerCase().trim()
@@ -194,6 +203,93 @@ Rewrite it now so that it:
 
 Return ONLY the improved WhatsApp message text.`
 
+const buildCaptionPrompt = ({ platform, tone, topic, variations }) => `You are a senior social media copywriter for Indian brands.
+
+Write ${variations} distinct ${platform} caption variations for this brief:
+- Topic: ${topic}
+- Tone: ${tone}
+
+Rules:
+- Return ONLY valid JSON
+- Use this exact shape:
+{
+  "captions": ["caption 1", "caption 2"]
+}
+- Each caption should feel different, not lightly reworded
+- Each caption should be platform-appropriate for ${platform}
+- Include a CTA where useful
+- Add hashtags only if they truly fit
+- Avoid generic filler like "unlock your potential" unless the topic actually calls for it
+`
+
+const buildHashtagPrompt = ({ platform, topic, count }) => `You are a social media strategist.
+
+Create ${count} relevant hashtags for:
+- Platform: ${platform}
+- Topic: ${topic}
+
+Rules:
+- Return ONLY valid JSON
+- Use this exact shape:
+{
+  "hashtags": ["#one", "#two"]
+}
+- Mix broad, niche, and intent-based hashtags
+- No duplicates
+- Keep them relevant to the user's topic`
+
+const buildIdeaPrompt = ({ platform, topic, audience, count }) => `You are a content strategist.
+
+Generate ${count} strong post ideas for:
+- Platform: ${platform}
+- Topic: ${topic}
+- Target audience: ${audience}
+
+Rules:
+- Return ONLY valid JSON
+- Use this exact shape:
+{
+  "ideas": [
+    { "title": "string", "hook": "string" }
+  ]
+}
+- Make each idea distinct
+- Keep them practical and specific to the audience
+- Avoid vague generic ideas`
+
+const buildAdPrompt = ({ platform, product, usp, audience }) => `You are an expert paid ads copywriter.
+
+Create ad copy for:
+- Platform: ${platform}
+- Product/Service: ${product}
+- USP: ${usp}
+- Target audience: ${audience}
+
+Rules:
+- Return ONLY valid JSON
+- Use this exact shape:
+{
+  "headline": "string",
+  "primaryText": "string",
+  "description": "string"
+}
+- Make it conversion-focused
+- Keep headline punchy
+- Keep the copy specific to the product, USP, and audience`
+
+const buildBlogPrompt = ({ topic, keyword, level }) => `You are a content strategist and SEO writer.
+
+Create a blog outline for:
+- Topic: ${topic}
+- Target SEO keyword: ${keyword}
+- Audience level: ${level}
+
+Rules:
+- Return markdown only
+- Include one H1, 3-5 H2s, and relevant H3s
+- Make the outline specific to the topic and keyword
+- Include actionable angles, not generic headings`
+
 const callGemini = async (apiKey, prompt) => {
     const candidateModels = ['gemini-2.5-flash-lite', 'gemini-2.5-flash']
     let lastError = null
@@ -311,6 +407,37 @@ const callOpenAI = async (apiKey, prompt) => {
     return text.trim()
 }
 
+const getProviders = ({ gemini, openai, grok, activeProvider }) => {
+    const allProviders = {
+        gemini: { id: 'gemini', key: gemini, fn: callGemini },
+        openai: { id: 'openai', key: openai, fn: callOpenAI },
+        grok: { id: 'grok', key: grok, fn: callGrok }
+    }
+    const fallbackOrder = ['gemini', 'openai', 'grok'].filter((provider) => provider !== activeProvider)
+    return [activeProvider, ...fallbackOrder].map((provider) => allProviders[provider]).filter(Boolean)
+}
+
+const generateWithProviders = async (providers, prompt, parser = null) => {
+    const providerErrors = []
+
+    for (const provider of providers) {
+        if (!provider.key) continue
+
+        try {
+            const raw = await provider.fn(provider.key, prompt)
+            const output = parser ? parser(raw) : raw
+            if (!output) throw new Error('Model returned empty or invalid response')
+            return { output, provider: provider.id }
+        } catch (error) {
+            const message = `${provider.id}: ${error.message}`
+            console.error(`[api/generate] ${message}`)
+            providerErrors.push(message)
+        }
+    }
+
+    throw new Error(providerErrors.length ? providerErrors.join(' | ') : 'No API key configured. Please add Gemini or OpenAI key in Settings.')
+}
+
 const generateWhatsAppMessage = async ({ provider, prompt, anchors }) => {
     const firstDraft = normalizeMessage(await provider.fn(provider.key, prompt))
 
@@ -414,6 +541,8 @@ export async function POST(request) {
         const { gemini, openai, grok, activeProvider, source, profile } = await getApiKeys()
         console.log('[api/generate] key source + provider:', { source, activeProvider, hasGemini: Boolean(gemini), hasOpenAI: Boolean(openai), hasGrok: Boolean(grok) })
 
+        const providers = getProviders({ gemini, openai, grok, activeProvider })
+
         if (type === 'whatsapp') {
             if (!campaignGoal.trim()) {
                 return NextResponse.json({ error: 'Campaign goal is required.' }, { status: 400 })
@@ -423,17 +552,9 @@ export async function POST(request) {
             const anchors = extractCampaignAnchors(trimmedGoal)
             console.log('[api/generate] whatsapp anchors:', anchors)
 
-            const allProviders = {
-                gemini: { id: 'gemini', key: gemini, fn: callGemini },
-                openai: { id: 'openai', key: openai, fn: callOpenAI },
-                grok: { id: 'grok', key: grok, fn: callGrok }
-            }
-            const fallbackOrder = ['gemini', 'openai', 'grok'].filter((p) => p !== activeProvider)
-            const providerOrder = [activeProvider, ...fallbackOrder].map((p) => allProviders[p]).filter(Boolean)
-
             const providerErrors = []
 
-            for (const provider of providerOrder) {
+            for (const provider of providers) {
                 if (!provider.key) continue
                 try {
                     const brief = await extractCampaignBrief({
@@ -471,13 +592,108 @@ export async function POST(request) {
             return NextResponse.json({ error: errDetail }, { status: 400 })
         }
 
-        const baseTopic = topic.trim() || 'your latest campaign'
-        const seed = sampleByPlatform[platform] || sampleByPlatform.Instagram
+        if (type === 'content_captions') {
+            const promptText = topic.trim()
+            if (!promptText) {
+                return NextResponse.json({ error: 'Topic / prompt is required.' }, { status: 400 })
+            }
 
-        return NextResponse.json({
-            success: true,
-            caption: `${seed} Focus on ${baseTopic}, keep the tone clear, and end with a CTA that fits ${platform}.`
-        })
+            const prompt = buildCaptionPrompt({
+                platform,
+                tone,
+                topic: promptText,
+                variations: body.variations || 3
+            })
+
+            const { output, provider } = await generateWithProviders(providers, prompt, (raw) => {
+                const parsed = parseJsonLoose(raw)
+                return Array.isArray(parsed?.captions) ? parsed.captions : null
+            })
+
+            return NextResponse.json({ success: true, type, data: output, provider })
+        }
+
+        if (type === 'content_hashtags') {
+            const promptText = topic.trim()
+            if (!promptText) {
+                return NextResponse.json({ error: 'Topic / prompt is required.' }, { status: 400 })
+            }
+
+            const { output, provider } = await generateWithProviders(
+                providers,
+                buildHashtagPrompt({ platform, topic: promptText, count: body.count || 15 }),
+                (raw) => {
+                    const parsed = parseJsonLoose(raw)
+                    return Array.isArray(parsed?.hashtags) ? parsed.hashtags : null
+                }
+            )
+
+            return NextResponse.json({ success: true, type, data: output, provider })
+        }
+
+        if (type === 'content_ideas') {
+            const promptText = topic.trim()
+            if (!promptText) {
+                return NextResponse.json({ error: 'Topic is required.' }, { status: 400 })
+            }
+
+            const { output, provider } = await generateWithProviders(
+                providers,
+                buildIdeaPrompt({
+                    platform,
+                    topic: promptText,
+                    audience: body.audience?.trim() || 'general audience',
+                    count: body.count || 5
+                }),
+                (raw) => {
+                    const parsed = parseJsonLoose(raw)
+                    return Array.isArray(parsed?.ideas) ? parsed.ideas : null
+                }
+            )
+
+            return NextResponse.json({ success: true, type, data: output, provider })
+        }
+
+        if (type === 'content_adcopy') {
+            if (!body.product?.trim() || !body.usp?.trim() || !body.audience?.trim()) {
+                return NextResponse.json({ error: 'Product, USP, and target audience are required.' }, { status: 400 })
+            }
+
+            const { output, provider } = await generateWithProviders(
+                providers,
+                buildAdPrompt({
+                    platform,
+                    product: body.product.trim(),
+                    usp: body.usp.trim(),
+                    audience: body.audience.trim()
+                }),
+                (raw) => {
+                    const parsed = parseJsonLoose(raw)
+                    return parsed?.headline && parsed?.primaryText && parsed?.description ? parsed : null
+                }
+            )
+
+            return NextResponse.json({ success: true, type, data: output, provider })
+        }
+
+        if (type === 'content_blog') {
+            if (!body.blogTopic?.trim() || !body.keyword?.trim()) {
+                return NextResponse.json({ error: 'Blog topic and target keyword are required.' }, { status: 400 })
+            }
+
+            const { output, provider } = await generateWithProviders(
+                providers,
+                buildBlogPrompt({
+                    topic: body.blogTopic.trim(),
+                    keyword: body.keyword.trim(),
+                    level: body.level || 'Intermediate'
+                })
+            )
+
+            return NextResponse.json({ success: true, type, data: output, provider })
+        }
+
+        return NextResponse.json({ error: 'Unsupported generate type.' }, { status: 400 })
     } catch (error) {
         console.error('[api/generate] error:', error)
         return NextResponse.json({ success: false, error: error.message }, { status: 500 })
