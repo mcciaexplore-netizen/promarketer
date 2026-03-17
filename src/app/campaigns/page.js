@@ -13,7 +13,9 @@ import {
     Globe,
     Database,
     Loader2,
-    Table2
+    Table2,
+    CheckCircle2,
+    AlertCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -26,6 +28,13 @@ export default function CampaignPlannerPage() {
         supabaseConnected: true,
         sheetsConfigured: false,
         campaignStorageProvider: 'supabase'
+    });
+    const [aiStatus, setAiStatus] = useState({
+        configured: false,
+        hasGemini: false,
+        hasOpenAI: false,
+        activeProvider: 'gemini',
+        source: 'none'
     });
     const [form, setForm] = useState({
         industry: '',
@@ -40,6 +49,13 @@ export default function CampaignPlannerPage() {
             .then((response) => response.json())
             .then((result) => {
                 if (result.success) setStorageStatus(result.data);
+            })
+            .catch(() => null);
+
+        fetch('/api/settings/ai-status')
+            .then((response) => response.json())
+            .then((result) => {
+                if (result.success) setAiStatus(result.data);
             })
             .catch(() => null);
     }, []);
@@ -247,6 +263,23 @@ export default function CampaignPlannerPage() {
                                 Saving destination: {storageLabel}
                             </div>
                             <p className="mt-1 text-text-secondary">Change this in Settings → Integrations.</p>
+                        </div>
+
+                        <div className={`rounded-xl border px-4 py-3 text-sm ${aiStatus.configured ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+                            <div className="flex items-center gap-2 font-semibold text-text-primary">
+                                {aiStatus.configured ? (
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                ) : (
+                                    <AlertCircle className="w-4 h-4 text-amber-600" />
+                                )}
+                                AI generation {aiStatus.configured ? 'connected' : 'not detected'}
+                            </div>
+                            <p className="mt-1 text-text-secondary">
+                                Active provider: <span className="font-medium text-text-primary">{aiStatus.activeProvider}</span> · Source: <span className="font-medium text-text-primary">{aiStatus.source}</span>
+                            </p>
+                            <p className="mt-1 text-text-secondary">
+                                Gemini: {aiStatus.hasGemini ? 'Yes' : 'No'} · OpenAI: {aiStatus.hasOpenAI ? 'Yes' : 'No'}
+                            </p>
                         </div>
 
                         <button type="submit" className="btn-primary w-full shadow-sm mt-4" disabled={isGenerating}>
