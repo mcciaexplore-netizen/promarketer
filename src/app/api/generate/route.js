@@ -195,7 +195,7 @@ Rewrite it now so that it:
 Return ONLY the improved WhatsApp message text.`
 
 const callGemini = async (apiKey, prompt) => {
-    const candidateModels = ['gemini-2.5-flash-preview-04-17', 'gemini-2.5-flash', 'gemini-2.0-flash']
+    const candidateModels = ['gemini-2.5-flash-lite', 'gemini-2.5-flash']
     let lastError = null
 
     for (const model of candidateModels) {

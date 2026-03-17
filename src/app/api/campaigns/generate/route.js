@@ -222,7 +222,7 @@ const normalizeCalendar = (payload) => ({
 })
 
 const callGemini = async (apiKey, prompt) => {
-    const models = ['gemini-2.5-flash', 'gemini-2.0-flash']
+    const models = ['gemini-2.5-flash-lite', 'gemini-2.5-flash']
     let lastError = null
 
     for (const model of models) {
