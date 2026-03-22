@@ -45,20 +45,20 @@ export const inviteTeamMember = async (email, role = 'member') => {
 
 // ── SPACES ────────────────────────────────────
 export const getSpaces = async () => {
-    const { data } = await supabase
-        .from('spaces').select('*, created_by(full_name)')
-        .order('created_at')
+    const res = await fetch('/api/spaces', { cache: 'no-store' })
+    const { data } = await res.json()
     return data
 }
 
 export const createSpace = async (space) => {
-    const { data: { user } } = await supabase.auth.getUser()
-    const payload = { ...space }
-    if (user?.id) payload.created_by = user.id
-
-    const { data } = await supabase.from('spaces')
-        .insert(payload)
-        .select().single()
+    console.log('[createSpace] payload:', space)
+    const res = await fetch('/api/spaces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(space),
+    })
+    const { data, error } = await res.json()
+    if (error) throw new Error(error)
     return data
 }
 
