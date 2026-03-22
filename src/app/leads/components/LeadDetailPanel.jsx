@@ -80,13 +80,13 @@ export default function LeadDetailPanel() {
                                     <div>
                                         <label className="text-[11px] font-bold text-[#5E6C84] block mb-1">Assignee</label>
                                         <div className="flex items-center gap-2 cursor-pointer p-1 -ml-1 text-sm font-semibold border border-transparent hover:border-gray-200 hover:bg-gray-50 rounded transition-colors group">
-                                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[10px] text-blue-800">{selectedLead.assignee[0]}</div>
-                                            {selectedLead.assignee}
+                                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[10px] text-blue-800">{selectedLead.assignee?.full_name?.[0]?.toUpperCase() || '?'}</div>
+                                            {selectedLead.assignee?.full_name || 'Unassigned'}
                                         </div>
                                     </div>
                                     <div>
                                         <label className="text-[11px] font-bold text-[#5E6C84] block mb-1">Deal Value</label>
-                                        <input className="w-full text-sm font-bold p-1 border border-transparent hover:bg-gray-50 hover:border-gray-200 focus:bg-white rounded -m-1 focus:outline-primary transition-colors text-green-700" type="text" defaultValue={`₹${selectedLead.value.toLocaleString()}`} />
+                                        <input className="w-full text-sm font-bold p-1 border border-transparent hover:bg-gray-50 hover:border-gray-200 focus:bg-white rounded -m-1 focus:outline-primary transition-colors text-green-700" type="text" defaultValue={`₹${Number(selectedLead.deal_value || 0).toLocaleString()}`} />
                                     </div>
                                     <div>
                                         <label className="text-[11px] font-bold text-[#5E6C84] block mb-1">Source</label>
@@ -94,11 +94,11 @@ export default function LeadDetailPanel() {
                                     </div>
                                     <div>
                                         <label className="text-[11px] font-bold text-[#5E6C84] block mb-1">Next Follow-up</label>
-                                        <input className="w-full text-sm font-semibold p-1 border border-transparent hover:bg-gray-50 hover:border-gray-200 focus:bg-white rounded -m-1 focus:outline-primary transition-colors text-primary" type="date" defaultValue={selectedLead.nextFollowUp} />
+                                        <input className="w-full text-sm font-semibold p-1 border border-transparent hover:bg-gray-50 hover:border-gray-200 focus:bg-white rounded -m-1 focus:outline-primary transition-colors text-primary" type="date" defaultValue={selectedLead.next_followup} />
                                     </div>
                                     <div>
                                         <label className="text-[11px] font-bold text-[#5E6C84] block mb-1">Last Contacted</label>
-                                        <div className="w-full text-sm font-medium p-1 text-gray-400 -m-1 cursor-default">{selectedLead.lastContact}</div>
+                                        <div className="w-full text-sm font-medium p-1 text-gray-400 -m-1 cursor-default">{selectedLead.created_at ? new Date(selectedLead.created_at).toLocaleDateString() : '—'}</div>
                                     </div>
                                 </div>
                             </div>
@@ -159,7 +159,7 @@ export default function LeadDetailPanel() {
                                     <div className="absolute top-2 -left-[5px] border-[5px] border-transparent border-r-white z-10"></div>
                                     <p className="text-[13px] text-[#172B4D]"><strong>Pratik</strong> logged a call</p>
                                     <p className="text-[12px] text-[#5E6C84] mt-1">&quot;Left a voicemail.&quot;</p>
-                                    <span className="text-[10px] font-bold text-[#5E6C84] uppercase mt-3 block">{selectedLead.lastContact}</span>
+                                    <span className="text-[10px] font-bold text-[#5E6C84] uppercase mt-3 block">{selectedLead.created_at ? new Date(selectedLead.created_at).toLocaleDateString() : '—'}</span>
                                 </div>
                             </div>
                             <div className="relative">
